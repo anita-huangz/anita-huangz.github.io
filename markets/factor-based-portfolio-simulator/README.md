@@ -32,7 +32,7 @@ Fama-French 3-factor attribution:
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,data]"
 factor-sim --factors momentum --top-n 3
-pytest -q      # 87 tests, no network
+pytest -q      # 105 tests, no network
 ruff check .
 ```
 
@@ -166,7 +166,7 @@ src/factor_sim/
   plotting.py      NAV and drawdown charts
   cli.py           argument parsing
 examples/          the look-ahead demonstration
-tests/             87 tests
+tests/             105 tests
 ```
 
 Simulation does not plot, plotting does not simulate, and neither touches the

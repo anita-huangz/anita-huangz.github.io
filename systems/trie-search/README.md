@@ -27,7 +27,7 @@ trie-search https://example.com --depth 1
 trie-bench      # the trie against a dictionary scan
 trie-bench --index   # what positions and stemming cost
 trie-search https://example.com --stem --query '"park hours"'
-pytest -q       # 165 tests, no network
+pytest -q       # 195 tests, no network
 ruff check .
 ```
 

@@ -183,9 +183,15 @@ export function averageLength(corpus: Corpus): number {
 /**
  * How much a term's presence should count.
  *
- * A word on every page carries no signal. The `Math.max(…, 0)` floor is not
- * cosmetic: a term appearing on more than half the pages otherwise scores
- * negative, and a page could improve its rank by *not* matching the query.
+ * A word on every page carries no signal. The `1 +` inside the log is what
+ * keeps the result non-negative: Robertson's original form,
+ * `log((N - df + 0.5) / (df + 0.5))`, goes negative once a term is on more
+ * than half the pages, and then a page improves its rank by *not* matching
+ * the query. This is the variant Lucene uses for that reason.
+ *
+ * Given that, `Math.max(…, 0)` only fires when `df > N` -- an index and a
+ * corpus that have disagreed. Kept as a guard, not as the thing doing the
+ * work.
  */
 export function inverseDocumentFrequency(
   size: number,

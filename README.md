@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**2,506 tests** — 1,828 in Python, and 678 in the browser, most of them
+**2,585 tests** — 1,905 in Python, and 680 in the browser, most of them
 cross-checking the site's TypeScript ports against fixtures the Python
 generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
@@ -111,7 +111,7 @@ algorithmic depth, and how much the correctness depends on domain reasoning,
 not on line count: the scheduler below has twice the tests of the cache and is
 not twice the problem.
 
-### ✅ [Trie Search](systems/trie-search) · 165 tests
+### ✅ [Trie Search](systems/trie-search) · 195 tests
 
 Crawls a website, indexes every word into a trie, searches by prefix or
 single-character wildcard — and **ranks** the results with BM25.
@@ -133,7 +133,7 @@ raised and `dict(trie)` didn't work. The class claimed a contract it failed.
 
 **Python · httpx · lxml · data structures**
 
-### ✅ [Course Catalog & Scheduling](systems/course-catalog) · 161 tests
+### ✅ [Course Catalog & Scheduling](systems/course-catalog) · 190 tests
 
 Reads the **live** MPCS catalog at
 [mpcs-courses.cs.uchicago.edu](https://mpcs-courses.cs.uchicago.edu/) for any
@@ -256,7 +256,7 @@ weights chosen with knowledge of the returns they are scored on, a scaler
 fitted on the test set — each turns a flat result into a spectacular one, and
 none of them raises an error.
 
-### 1. ✅ [Factor Portfolio Simulator](markets/factor-based-portfolio-simulator) · 87 tests
+### 1. ✅ [Factor Portfolio Simulator](markets/factor-based-portfolio-simulator) · 105 tests
 
 Point-in-time backtest of cross-sectional equity factor strategies, with
 Fama-French 3-factor attribution — reported **against a benchmark**, because a

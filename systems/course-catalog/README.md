@@ -164,7 +164,7 @@ course-catalog --build 3 --no-earlier-than 10:00am --days-off Fri
 course-catalog --build 4 --require "MPCS 55001" --among "MPCS 53001,MPCS 51046,MPCS 52560,MPCS 51400"
 course-catalog --build 3 --prefer-instructor "Chaudhary" --options 5
 
-pytest -q       # 161 tests
+pytest -q       # 190 tests
 ruff check .
 ```
 
