@@ -131,6 +131,33 @@ a { color: inherit; }
 .hero .links a.primary { background: var(--ai); color: #fff; border-color: transparent; }
 
 .stats { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 36px; }
+
+/* Wide screens had the hero text ending at roughly half the viewport with
+   nothing to its right. The counts belong beside the claim they support
+   rather than under it -- and moving them up brings the featured project
+   above the fold. Below this width the grid collapses back to one column,
+   which is what the flex rule above already does. */
+@media (min-width: 1080px) {
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 64px;
+    align-items: start;
+  }
+  .hero h1,
+  .hero p,
+  .hero .links { grid-column: 1; }
+  .hero .stats {
+    grid-column: 2;
+    grid-row: 1 / span 4;
+    flex-direction: column;
+    gap: 22px;
+    margin-top: 6px;
+    padding-left: 28px;
+    border-left: 1px solid var(--border);
+    min-width: 200px;
+  }
+}
 .stat .n { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; }
 .stat .l { font-size: 13px; color: var(--muted); }
 
@@ -162,7 +189,12 @@ a { color: inherit; }
 
 .grid {
   display: grid; gap: 16px; padding: 12px 0 64px;
-  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  /* 340px, not a round number: the widest card head -- "Statistical
+     Inference", a four-digit test count and the demo marker -- measures 294px,
+     and the card adds 40px of padding. At 330px a three-column row went 4px
+     under that, the head wrapped, and one title sat 29px below its
+     neighbours'. Below this the grid drops a column rather than cramping. */
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
 }
 .card {
   background: var(--surface); border: 1px solid var(--border);
@@ -184,7 +216,13 @@ a { color: inherit; }
   max-height: 320px; object-fit: cover; object-position: top;
 }
 
+/* One line, always. When "Quantitative Finance" and "Statistical Inference"
+   pushed the demo marker onto a second row, the head grew 18px -> 47px and
+   dropped that card's title 29px below its neighbours' -- measured at every
+   width from 1100px to 1440px. `nowrap` on the parts is what keeps the row
+   from breaking mid-label if a longer category is ever added. */
 .card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.card-head > * { white-space: nowrap; }
 .card h3 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
 .card.featured h3 { font-size: 22px; }
 .card p { margin: 0; color: var(--text-2); font-size: 14px; }

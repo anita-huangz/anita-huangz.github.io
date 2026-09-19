@@ -13,6 +13,7 @@ from .signal import (
     FeatureTest,
     LearningCurve,
     PermutationTest,
+    auc_on_folds,
     build_pipeline,
     cross_validated_auc,
     feature_tests,
@@ -20,6 +21,7 @@ from .signal import (
     learning_curve,
     minimum_detectable_auc,
     permutation_test,
+    prepare_folds,
 )
 
 __all__ = [
@@ -30,6 +32,7 @@ __all__ = [
     "PermutationTest",
     "SchemaError",
     "TemplateReport",
+    "auc_on_folds",
     "build_pipeline",
     "cross_validated_auc",
     "feature_tests",
@@ -39,5 +42,6 @@ __all__ = [
     "load",
     "minimum_detectable_auc",
     "permutation_test",
+    "prepare_folds",
     "template_report",
 ]

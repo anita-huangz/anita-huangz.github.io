@@ -218,3 +218,35 @@ src/arranger/
   midi.py          Standard MIDI File output
   cli.py           the command line above
 ```
+
+## Notes and limits
+
+- **It arranges harmony, not music.** The input is a chord chart, so there is
+  no melody to voice around and nothing decides which note is on top for
+  melodic reasons. A real arranger starts from the tune.
+- **There is no rhythm.** Every chord is held for the same `--beats` (2.0 by
+  default), struck together and released together. The MIDI is a harmonic
+  sketch you can play or import, not a performance.
+- **No dynamics, pedal or articulation.** Velocity is fixed per hand — 70 left,
+  85 right, so the melody-side reads slightly louder — and that is the whole of
+  the expressive content.
+- **The cost weights are hand-set, not learned.** They encode ordinary
+  part-writing practice and they are internally consistent, but nothing here
+  has been fitted to, or validated against, what human arrangers actually
+  choose. "Optimal" means cheapest under *these* weights. That the search finds
+  the true minimum is proven against brute force; that the minimum is the
+  *musical* answer is a claim this project does not make.
+- **The greedy comparison is eight progressions.** Enough to show the gap is
+  real and consistent in sign, not enough to put a confidence interval on
+  "28.9% worse at advanced".
+- **The candidate cap is measured on this corpus.** 60 matches 200 exactly
+  across the 120 arrangements tested; a progression unlike anything in the
+  corpus could in principle need more, and the test that catches that only
+  covers the corpus.
+- **Chord symbols only, and a fixed vocabulary of them.** The parser handles
+  triads, sevenths, extensions, alterations and slash bass. Anything it cannot
+  read is refused rather than approximated — see `theory.py` for what is in.
+- **The model layer is optional and cannot widen the limits.** Without a key,
+  `intent.py` reads the same sentences by keyword. With one, `llm.py` maps
+  free text to the *same* settings object and a validator rejects anything out
+  of range, so a model cannot talk the arranger past a difficulty constraint.

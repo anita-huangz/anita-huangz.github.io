@@ -8,7 +8,7 @@ and more useful claim than "my model got 51%".
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 news-signal                      # the whole analysis
 news-signal --section contents   # or one part
-pytest -q                        # 32 tests
+pytest -q                        # 38 tests
 ```
 
 ---
@@ -54,9 +54,9 @@ gradient boosting, 200 trees                 0.5136
 
 permutation test, 150 shuffles of the label:
   observed                 0.5145
-  shuffled-label null      0.4994 +/- 0.0122
-  95% of shuffles fall in  [0.4759, 0.5227]
-  z = +1.24,  p = 0.113
+  shuffled-label null      0.4991 +/- 0.0120
+  95% of shuffles fall in  [0.4749, 0.5179]
+  z = +1.28,  p = 0.119
   -> the real labels are NOT distinguishable from random ones.
 ```
 
@@ -139,7 +139,7 @@ src/news_signal/
   signal.py  permutation test, power, learning curve,
              per-feature tests with BH correction              (pure)
   cli.py     the report
-tests/       32 tests, most of them paired against planted data
+tests/       38 tests, most of them paired against planted data
 notebooks/   the original, kept as the record (marked superseded)
 ```
 

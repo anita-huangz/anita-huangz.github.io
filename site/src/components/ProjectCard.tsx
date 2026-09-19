@@ -40,7 +40,7 @@ export function ProjectCard({ project, onOpen, baseUrl }: Props) {
           {project.tests !== undefined && (
             <span className="tests">✓ {project.tests} tests</span>
           )}
-          {hasDemo(project.slug) && <span className="live">▶ Live demo</span>}
+          {hasDemo(project.slug) && <span className="live">▶ Demo</span>}
         </div>
         <h3>{project.title}</h3>
         <p>{project.summary}</p>

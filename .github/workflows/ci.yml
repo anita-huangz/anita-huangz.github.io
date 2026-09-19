@@ -57,6 +57,13 @@ jobs:
       - name: Lint
         run: ruff check .
 
+      - name: Lint the repository scripts
+        # `ruff check .` above runs inside the project, so nothing was linting
+        # the checkers in scripts/ that CI itself depends on.
+        if: matrix.python-version == '3.13'
+        working-directory: .
+        run: ruff check scripts
+
       - name: Test
         # Every suite runs offline: no network, no API keys. The AI platform
         # uses its replay provider and fake data clients; the two quantitative
@@ -68,12 +75,19 @@ jobs:
         # to import -- which is exactly what these projects used to do.
         run: pytest -q --cov --cov-report=term-missing
 
-      - name: Documented test count matches the suite
-        # Run once rather than on all three interpreters: the count does not
-        # depend on the Python version, and three identical failures are noise.
+      - name: Documentation matches the code
+        # Run once rather than on all three interpreters: neither check depends
+        # on the Python version, and three identical failures are noise.
+        #
+        # Test counts drift because they change on every commit; documented
+        # flags drift because they never do, and nobody rereads a README to
+        # check the parser still has what it promises. Both have gone wrong
+        # here before.
         if: matrix.python-version == '3.13'
         working-directory: .
-        run: python scripts/check_test_counts.py "${{ matrix.project }}"
+        run: |
+          python scripts/check_test_counts.py "${{ matrix.project }}"
+          python scripts/check_readme_flags.py "${{ matrix.project }}"
 
   site:
     name: portfolio site

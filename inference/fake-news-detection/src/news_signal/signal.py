@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 from scipy import stats
+from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
@@ -103,6 +104,80 @@ def cross_validated_auc(
         method="predict_proba",
     )[:, 1]
     return float(roc_auc_score(y, probability))
+
+
+@dataclass(frozen=True)
+class PreparedFolds:
+    """Cross-validation folds with the preprocessing already applied.
+
+    The permutation test refits the same model a few hundred times, changing
+    only the labels. The preprocessing -- median imputation, standardisation,
+    one-hot encoding with a minimum category frequency -- reads the *features*
+    and nothing else, so refitting it once per shuffle per fold repeats
+    identical work: at 200 permutations that is 1,000 fits where 5 suffice,
+    and it dominates the run (about 80% of each fit, measured).
+
+    Preparing the folds once is what makes the reuse possible, and it is also
+    what makes the folds fixed across shuffles. That is a deliberate choice,
+    not a side effect: holding the split constant means the spread of the null
+    reflects the label relationship alone rather than the label relationship
+    plus split-to-split noise. Measured on this dataset it narrows the null
+    slightly, 0.0122 to 0.0119.
+
+    What it does **not** do is leak. Each fold's preprocessing is fitted on
+    that fold's training rows only, exactly as the pipeline does it, and the
+    observed AUC comes out bit-identical to the pipeline's -- 0.514472 either
+    way, which is the check that this is a speedup and not a shortcut.
+    """
+
+    train_features: tuple[np.ndarray, ...]
+    test_features: tuple[np.ndarray, ...]
+    train_rows: tuple[np.ndarray, ...]
+    test_rows: tuple[np.ndarray, ...]
+
+    def __len__(self) -> int:
+        return len(self.train_rows)
+
+
+def prepare_folds(
+    data: Dataset, folds: int = FOLDS, seed: int = RANDOM_STATE
+) -> PreparedFolds:
+    """Split once, and fit the preprocessing per fold on its training rows."""
+    splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
+    template = build_pipeline().named_steps["prep"]
+    train_features, test_features, train_rows, test_rows = [], [], [], []
+    for train, test in splitter.split(data.features, data.label):
+        preprocess = clone(template)
+        train_features.append(preprocess.fit_transform(data.features.iloc[train]))
+        test_features.append(preprocess.transform(data.features.iloc[test]))
+        train_rows.append(train)
+        test_rows.append(test)
+    return PreparedFolds(
+        train_features=tuple(train_features),
+        test_features=tuple(test_features),
+        train_rows=tuple(train_rows),
+        test_rows=tuple(test_rows),
+    )
+
+
+def auc_on_folds(
+    prepared: PreparedFolds, label: np.ndarray, estimator=None
+) -> float:
+    """Out-of-fold AUC over already-preprocessed folds."""
+    model = estimator if estimator is not None else LogisticRegression(
+        max_iter=2000, random_state=RANDOM_STATE
+    )
+    out_of_fold = np.empty(len(label), dtype=float)
+    for train_x, test_x, train, test in zip(
+        prepared.train_features,
+        prepared.test_features,
+        prepared.train_rows,
+        prepared.test_rows,
+        strict=True,
+    ):
+        fitted = clone(model).fit(train_x, label[train])
+        out_of_fold[test] = fitted.predict_proba(test_x)[:, 1]
+    return float(roc_auc_score(label, out_of_fold))
 
 
 @dataclass(frozen=True)
@@ -182,14 +257,14 @@ def permutation_test(
             f"{1 / (permutations + 1):.3f} on the p-value, so a significant "
             "result is unreachable; use at least 19"
         )
-    observed = cross_validated_auc(data, estimator, folds=folds, seed=seed)
+    # Prepared once: the shuffles change the labels, never the features, so
+    # the preprocessing is the same every time. See `PreparedFolds`.
+    prepared = prepare_folds(data, folds=folds, seed=seed)
+    observed = auc_on_folds(prepared, data.label, estimator)
     rng = np.random.default_rng(seed)
     scores = np.empty(permutations)
     for i in range(permutations):
-        shuffled = rng.permutation(data.label)
-        scores[i] = cross_validated_auc(
-            data, estimator, label=shuffled, folds=folds, seed=seed
-        )
+        scores[i] = auc_on_folds(prepared, rng.permutation(data.label), estimator)
     return PermutationTest(
         observed=observed, null_scores=scores, permutations=permutations
     )

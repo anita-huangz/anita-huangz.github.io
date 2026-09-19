@@ -95,7 +95,36 @@ def cox_report(data) -> None:
     return model, X
 
 
-def classification_report(data) -> np.ndarray:
+class OutOfFold:
+    """Out-of-fold probabilities, computed once per model for the whole run.
+
+    Three sections want the same two logistic fits, and each one is a full
+    five-fold cross-validation over 7,043 rows -- half this command's runtime
+    went on recomputing them. The estimator, the split and the seed are all
+    fixed, so the repeats were bit-identical; this returns the first answer
+    rather than deriving it again.
+
+    Scoped to one dataset deliberately. A cache keyed on the model alone would
+    hand back another dataset's predictions the moment `--csv` was used.
+    """
+
+    def __init__(self, data) -> None:
+        self._data = data
+        self._cache: dict[str, np.ndarray] = {}
+
+    def __call__(self, estimator) -> np.ndarray:
+        key = repr(estimator)
+        if key not in self._cache:
+            self._cache[key] = cross_validated_probabilities(self._data, estimator)
+        return self._cache[key]
+
+    @property
+    def fits(self) -> int:
+        """How many cross-validations actually ran. For tests."""
+        return len(self._cache)
+
+
+def classification_report(data, out_of_fold) -> None:
     _heading("CLASSIFICATION — and what the notebook's shortcuts were worth")
     leaky = leaky_holdout_score(data, models()["logistic"].__class__(max_iter=2000))
     honest = honest_holdout_score(data, models()["logistic"])
@@ -105,18 +134,17 @@ def classification_report(data) -> np.ndarray:
 
     print("\n  5-fold out-of-fold, preprocessing inside the pipeline:")
     for name, estimator in models().items():
-        p = cross_validated_probabilities(data, estimator)
+        p = out_of_fold(estimator)
         point, lo, hi = bootstrap_interval(roc_auc_score, data.event, p, draws=300)
         print(f"    {name:<20} AUC {point:.4f}  95% CI [{lo:.4f}, {hi:.4f}]")
     print("\n  The single split scored higher than the cross-validated interval")
     print("  contains. The optimism came from the split, not the leak.")
-    return cross_validated_probabilities(data, models(class_weight=None)["logistic"])
 
 
-def calibration_report(data) -> None:
+def calibration_report(data, out_of_fold) -> None:
     _heading("CALIBRATION — does 0.7 mean 70%?")
     for label, weight in (("class_weight='balanced'", "balanced"), ("unweighted", None)):
-        p = cross_validated_probabilities(data, models(class_weight=weight)["logistic"])
+        p = out_of_fold(models(class_weight=weight)["logistic"])
         print(
             f"  {label:<24} AUC {roc_auc_score(data.event, p):.4f}  "
             f"mean predicted {p.mean():.3f} vs actual {data.event.mean():.3f}  "
@@ -125,7 +153,7 @@ def calibration_report(data) -> None:
         )
     print("\n  Rebalancing changed the ranking by 0.0001 of AUC and made the")
     print("  probabilities about twice too large. SMOTE does the same thing.")
-    p = cross_validated_probabilities(data, models()["logistic"])
+    p = out_of_fold(models()["logistic"])
     curve = reliability_curve(p, data.event)
     print("\n  the balanced model's reliability:")
     for predicted, observed, count in zip(
@@ -201,19 +229,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    out_of_fold = OutOfFold(data)
+
     want = args.section
     if want in {"all", "survival"}:
         survival_report(data)
     if want in {"all", "cox", "decision"}:
         cox, X = cox_report(data)
     if want in {"all", "classification"}:
-        classification_report(data)
+        classification_report(data, out_of_fold)
     if want in {"all", "calibration"}:
-        calibration_report(data)
+        calibration_report(data, out_of_fold)
     if want in {"all", "decision"}:
-        probability = cross_validated_probabilities(
-            data, models(class_weight=None)["logistic"]
-        )
+        probability = out_of_fold(models(class_weight=None)["logistic"])
         decision_report(data, cox, X, probability, campaign)
     print()
     return 0

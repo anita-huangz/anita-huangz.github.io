@@ -26,7 +26,7 @@ export const PROJECTS: Project[] = [
       "TypeScript"
     ],
     "path": "llm-platform/sec-filing-intelligence",
-    "tests": 176,
+    "tests": 268,
     "highlights": [
       "Multi-provider model access: Anthropic, AWS Bedrock, and a deterministic replay provider behind one interface, switched by config",
       "A verifier node audits every citation against gathered evidence and can mark the answer unverified",
@@ -99,7 +99,7 @@ export const PROJECTS: Project[] = [
         "note": "Where the optional model layer points. Both issue free keys; the arranger works fully without one."
       }
     ],
-    "tests": 497,
+    "tests": 516,
     "highlights": [
       "Arrangement as a shortest path rather than a lookup: Viterbi over a lattice of candidate voicings, checked against brute force and beating the greedy baseline by 5.3% / 9.6% / 28.9% at the three difficulty levels",
       "Difficulty stated as enforceable numbers, so \"beginner\" is a promise a test can check rather than an adjective — and chords that cannot be played at a level are simplified with the reason shown, not swapped silently",
@@ -129,7 +129,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "markets/earnings-drift-tracker",
-    "tests": 47,
+    "tests": 79,
     "highlights": [
       "Announcements landing on a non-trading day fall back to the prior session's close; requiring an exact index match silently dropped a large, non-random slice of events",
       "A horizon with insufficient history is omitted rather than zero-filled, so a missing return is never read as a flat one",
@@ -169,7 +169,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "markets/factor-based-portfolio-simulator",
-    "tests": 70,
+    "tests": 105,
     "highlights": [
       "Fixed a look-ahead bias that overstated total return by 92 percentage points -- factors were computed once from the whole sample and reused at every rebalance",
       "Performance metrics were being computed on the last five rows of the backtest while describing three years",
@@ -212,7 +212,7 @@ export const PROJECTS: Project[] = [
       "benchmarking"
     ],
     "path": "systems/fastcache",
-    "tests": 89,
+    "tests": 98,
     "highlights": [
       "The original called `list.remove` on every cache hit -- a linear scan on the one path a cache exists to make fast. Across sizes 128 to 32,768 it slows 8.7x while this one stays flat at ~0.45us",
       "Expiry needs no heap: every entry gets the same TTL, so deadline order is insertion order and the next entry to die is the front of the dict",
@@ -245,7 +245,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "systems/trie-search",
-    "tests": 157,
+    "tests": 195,
     "highlights": [
       "Search was retrieval without ranking: each word mapped to the set of pages holding it, returned alphabetically, with no way to prefer a page matching both words of a two-word query",
       "BM25's IDF needs a floor at zero -- a term on more than half the pages otherwise scores negative, and a page improves its rank by not matching the query",
@@ -278,7 +278,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "systems/card-game-system",
-    "tests": 114,
+    "tests": 137,
     "highlights": [
       "Straights and straight flushes were missing entirely, and a straight is more likely than a flush -- hands that should have scored were ending the run",
       "\"Has a straight and has a flush\" is not a straight flush: 5h 6d 7h 8s 9h Kh 2h holds both and is neither, so the search runs per suit",
@@ -311,7 +311,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "systems/course-catalog",
-    "tests": 145,
+    "tests": 190,
     "highlights": [
       "The bundled CSV was a snapshot, so it went stale the moment the department published a new quarter -- it now reads the live catalog, and a script regenerates the offline snapshot",
       "A quarter is published before its meeting times are set. Winter 2026-27 went up with all 30 courses and no times -- and a course with no time conflicts with nothing, so it scores zero and beats every real timetable. Left in, the best schedule is the one that schedules nothing",
@@ -366,7 +366,7 @@ export const PROJECTS: Project[] = [
         "note": "Minute-resolution BTC/USD trades, resampled to daily bars."
       }
     ],
-    "tests": 40,
+    "tests": 64,
     "highlights": [
       "MinMaxScaler was fitted on the whole series before the split, so 36.2% of the scaled axis was territory training never reached and the model looks 1.61x better than it is",
       "RMSE on a price level is a statement about the price level: across 21 rolling origins the same forecaster scores $5 in one fold and $2,076 in another",
@@ -387,7 +387,7 @@ export const PROJECTS: Project[] = [
     "title": "Fake News Detection",
     "category": "inference",
     "summary": "A null result, established properly: this dataset contains no learnable signal, and the analysis says how much that rules out.",
-    "detail": "Every title is `Breaking News {i}` and every body is one sentence with the index substituted, so 4,000 distinct titles collapse to a single skeleton once the digits are stripped \u2014 a TF-IDF model over that is a model of the row number. The labels are random, which is harder to show: a permutation test refits on shuffled labels and the observed 0.5145 AUC sits inside the null's 95% range, p = 0.113. A power analysis then says 4,000 rows would detect AUC >= 0.526 at 80% power, which turns \"we found nothing\" into \"there is nothing bigger than this to find\".",
+    "detail": "Every title is `Breaking News {i}` and every body is one sentence with the index substituted, so 4,000 distinct titles collapse to a single skeleton once the digits are stripped \u2014 a TF-IDF model over that is a model of the row number. The labels are random, which is harder to show: a permutation test refits on shuffled labels and the observed 0.5145 AUC sits inside the null's 95% range, p = 0.119. A power analysis then says 4,000 rows would detect AUC >= 0.526 at 80% power, which turns \"we found nothing\" into \"there is nothing bigger than this to find\".",
     "tech": [
       "Python",
       "NumPy",
@@ -401,7 +401,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "The dataset, plus the number of label permutations to run.",
       "output": "Template detection per text column, cross-validated AUC for two model families, the permutation null with its p-value and floor, the minimum detectable effect at 80% power, a learning curve, and per-feature tests with a Benjamini-Hochberg correction.",
-      "scale": "4,000 rows, 24 columns. 32 tests, most of them paired against planted data."
+      "scale": "4,000 rows, 24 columns. 38 tests, most of them paired against planted data."
     },
     "sources": [
       {
@@ -410,7 +410,7 @@ export const PROJECTS: Project[] = [
         "note": "4,000 rows. Synthetic: titles are 'Breaking News N' and labels appear randomly assigned."
       }
     ],
-    "tests": 28,
+    "tests": 38,
     "highlights": [
       "4,000 distinct titles collapse to one skeleton once the digits are stripped: the text column is the row index in prose",
       "The permutation test is the load-bearing evidence, and the null distribution of a cross-validated AUC has to be simulated rather than looked up -- its spread depends on sample size, fold count and the model's capacity to overfit",
@@ -421,7 +421,7 @@ export const PROJECTS: Project[] = [
     ],
     "output": {
       "caption": "The permutation test, and what the sample rules out",
-      "text": "  title[0]: 'Breaking News 1'   4,000 distinct -> 1 skeleton\n\n  observed AUC             0.5145\n  shuffled-label null      0.4994 +/- 0.0122\n  95% of shuffles fall in  [0.4759, 0.5227]\n  z = +1.24,  p = 0.113\n  -> the real labels are NOT distinguishable from random ones.\n\n  4,000 rows would detect AUC >= 0.526 at 80% power."
+      "text": "  title[0]: 'Breaking News 1'   4,000 distinct -> 1 skeleton\n\n  observed AUC             0.5145\n  shuffled-label null      0.4991 +/- 0.0120\n  95% of shuffles fall in  [0.4749, 0.5179]\n  z = +1.28,  p = 0.119\n  -> the real labels are NOT distinguishable from random ones.\n\n  4,000 rows would detect AUC >= 0.526 at 80% power."
     }
   },
   {
@@ -452,7 +452,7 @@ export const PROJECTS: Project[] = [
         "note": "7,043 customers; the notebook drops 11 rows with blank TotalCharges."
       }
     ],
-    "tests": 76,
+    "tests": 105,
     "highlights": [
       "The dataset is right-censored survival data and the notebook treated it as binary classification, discarding the timing information entirely -- the Cox model's concordance (0.870) beats the classifier's AUC (0.845) on the same rows",
       "Class rebalancing -- SMOTE, which the notebook used -- changed the ranking by 0.0001 of AUC and made the probabilities twice too large: calibration error 0.149 against 0.012 unweighted. AUC cannot see it, and it matters the moment a score is multiplied by money",
@@ -495,7 +495,7 @@ export const PROJECTS: Project[] = [
         "note": "3,000 incidents across 7 industries and 6 attack types."
       }
     ],
-    "tests": 23,
+    "tests": 30,
     "highlights": [
       "All three numerics are indistinguishable from uniform (KS p = 0.42, 0.51, 0.80) where real loss figures are heavy-tailed, and the strongest association between any pair of columns is a Cramer's V of 0.062",
       "Silhouette on the real data is 0.0796 against 0.0810 on independently shuffled columns -- marginally worse than noise, and the shuffle keeps every marginal exactly while destroying only the joint structure",
@@ -535,7 +535,7 @@ export const PROJECTS: Project[] = [
         "note": "Two 10,000-row tables: customer behaviour and product catalogue."
       }
     ],
-    "tests": 29,
+    "tests": 33,
     "highlights": [
       "No user-item interaction matrix exists, so collaborative filtering is undefined here -- and the notebook's regression target, Probability_of_Recommendation, correlates with nothing else in the table (max |r| = 0.017)",
       "Every customer's purchases sit in distinct categories, so the obvious content rule ranks the held-out item's category last: NDCG 0.0090 against random's 0.1234",
@@ -587,7 +587,7 @@ export const PROJECTS: Project[] = [
         "note": "Interest-rate and liquidity indicators."
       }
     ],
-    "tests": 25,
+    "tests": 29,
     "highlights": [
       "The reported result was in-sample: optimised on the whole history and scored on the same history. Maximum Sharpe reports 5.61 there and 0.32 out of sample, a 17x collapse, while 1/N moves from 0.88 to 0.83 because it has no parameters to overfit",
       "1/N earns the most out of sample and is the only rule that estimates nothing -- DeMiguel, Garlappi and Uppal (2009), reproduced on five ETFs",
@@ -629,7 +629,7 @@ export const PROJECTS: Project[] = [
         "note": "Hourly reanalysis by latitude and longitude. The README also cites Meteostat; the code calls Open-Meteo."
       }
     ],
-    "tests": 20,
+    "tests": 24,
     "highlights": [
       "The lag-1 residual correlation is significantly positive in all six cities, so the OLS standard error is understated by 23% to 53% -- Tokyo's 75 years are worth about 32 independent ones",
       "Three corrections that share no assumptions land in the same place: Newey-West, a moving-block bootstrap, and rank-based Mann-Kendall with Sen's slope",

@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**2,585 tests** — 1,905 in Python, and 680 in the browser, most of them
+**2,591 tests** — 1,911 in Python, and 680 in the browser, most of them
 cross-checking the site's TypeScript ports against fixtures the Python
 generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
@@ -401,7 +401,7 @@ Ranking by value needs to know how long each customer *would* have stayed —
 the area under their own survival curve, which a classifier cannot produce.
 **Python · NumPy · pandas · scikit-learn · statsmodels (tests only)**
 
-### 2. ✅ [Fake News Detection](inference/fake-news-detection) · 32 tests
+### 2. ✅ [Fake News Detection](inference/fake-news-detection) · 38 tests
 A null result, established properly.
 
 Every title is `Breaking News {i}`; every body is one sentence with the index
@@ -413,8 +413,8 @@ The labels being random is harder to show:
 
 ```
 observed AUC             0.5145
-shuffled-label null      0.4994 ± 0.0122
-95% of shuffles fall in  [0.4759, 0.5227]     p = 0.113
+shuffled-label null      0.4991 ± 0.0120
+95% of shuffles fall in  [0.4749, 0.5179]     p = 0.119
 
 4,000 rows would detect AUC ≥ 0.526 at 80% power.
 ```
