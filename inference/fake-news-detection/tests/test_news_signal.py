@@ -18,12 +18,14 @@ from news_signal.data import (
     template_report,
 )
 from news_signal.signal import (
+    auc_on_folds,
     cross_validated_auc,
     feature_tests,
     gradient_boosting,
     learning_curve,
     minimum_detectable_auc,
     permutation_test,
+    prepare_folds,
 )
 
 
@@ -316,3 +318,62 @@ def test_the_dataset_is_a_real_file_not_an_lfs_pointer():
     first_line = DATA.read_text().splitlines()[0]
     assert not first_line.startswith("version https://git-lfs")
     assert "label" in first_line
+
+
+class TestPreparedFolds:
+    """The permutation test's fast path, held to the slow path's answer.
+
+    `prepare_folds` exists only because refitting unsupervised preprocessing
+    once per shuffle is wasted work. That is a speedup exactly as long as it
+    computes the same thing, so the equivalence is asserted rather than
+    assumed -- and asserted on the real dataset, not a toy one.
+    """
+
+    def test_it_reproduces_the_pipeline_auc_exactly(self):
+        data = load()
+        prepared = prepare_folds(data)
+        assert auc_on_folds(prepared, data.label) == pytest.approx(
+            cross_validated_auc(data), abs=1e-12
+        )
+
+    def test_it_reproduces_the_pipeline_auc_for_a_different_model(self):
+        data = load()
+        prepared = prepare_folds(data)
+        assert auc_on_folds(
+            prepared, data.label, gradient_boosting()
+        ) == pytest.approx(
+            cross_validated_auc(data, gradient_boosting()), abs=1e-12
+        )
+
+    def test_the_preprocessing_never_sees_the_rows_it_is_scored_on(self):
+        # The whole point. If a fold's preprocessing were fitted on all the
+        # data, the test rows would have contributed to the median, the scale
+        # and the category list used to encode them.
+        data = load()
+        prepared = prepare_folds(data)
+        for train, test in zip(prepared.train_rows, prepared.test_rows, strict=True):
+            assert not set(train) & set(test)
+
+    def test_every_row_is_predicted_exactly_once(self):
+        data = load()
+        prepared = prepare_folds(data)
+        predicted = [row for fold in prepared.test_rows for row in fold]
+        assert sorted(predicted) == list(range(len(data.label)))
+
+    def test_the_folds_are_the_same_for_every_shuffle(self):
+        # Fixed folds are what make the reuse valid, and they are also what
+        # keeps split noise out of the null. If this ever stops holding, the
+        # cached preprocessing is being applied to the wrong rows.
+        data = load()
+        first, second = prepare_folds(data), prepare_folds(data)
+        for a, b in zip(first.test_rows, second.test_rows, strict=True):
+            assert (a == b).all()
+
+    def test_shuffling_the_labels_changes_the_score_but_not_the_features(self):
+        data = load()
+        prepared = prepare_folds(data)
+        shuffled = np.random.default_rng(0).permutation(data.label)
+        before = [m.copy() for m in prepared.train_features]
+        auc_on_folds(prepared, shuffled)
+        for original, after in zip(before, prepared.train_features, strict=True):
+            assert (original == after).all(), "the cached folds were mutated"

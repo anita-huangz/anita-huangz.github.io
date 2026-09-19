@@ -44,6 +44,7 @@ def collected(project: Path) -> int:
         cwd=project,
         capture_output=True,
         text=True,
+        check=False,  # a collection error is reported below, not raised
     )
     match = re.search(r"(\d+) tests? collected", result.stdout)
     if not match:
@@ -83,7 +84,24 @@ def claim_in_site_data(relative: str) -> tuple[str, int] | None:
         return None
     if not (match := COUNT.search(entry.group(1))):
         return None
-    return "site/src/data/projects.ts", parse(match.group(1))
+    return "site/src/data/projects.ts (scale)", parse(match.group(1))
+
+
+def badge_in_site_data(relative: str) -> tuple[str, int] | None:
+    """The numeric `tests` field behind the card badge and the detail header.
+
+    This is the count a visitor actually sees first -- "✓ 268 tests" on the
+    card -- and the hero's headline total is the sum of these, not of the
+    prose. An earlier version of this script checked only the `scale` string
+    and reported every project clean while all fifteen badges were stale.
+    """
+    text = (ROOT / "site/src/data/projects.ts").read_text()
+    entry = re.search(
+        rf'"path":\s*"{re.escape(relative)}".*?"tests":\s*(\d+)', text, re.DOTALL
+    )
+    if not entry:
+        return None
+    return "site/src/data/projects.ts (tests)", int(entry.group(1))
 
 
 def totals_line() -> tuple[int, int, int, int]:
@@ -111,7 +129,8 @@ def check_project(relative: str) -> list[str]:
 
     for finder, label in (
         (claim_in_root_readme, "root README"),
-        (claim_in_site_data, "site project data"),
+        (claim_in_site_data, "site project data (scale)"),
+        (badge_in_site_data, "site card badge"),
     ):
         found = finder(relative)
         if found is None:
@@ -121,7 +140,7 @@ def check_project(relative: str) -> list[str]:
         if claimed != actual:
             problems.append(f"{where}: claims {claimed} tests, suite has {actual}")
 
-    print(f"{relative}: {actual} tests, {len(claims) + 2} claim(s) checked")
+    print(f"{relative}: {actual} tests, {len(claims) + 3} claim(s) checked")
     return problems
 
 
