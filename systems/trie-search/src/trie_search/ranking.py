@@ -96,9 +96,16 @@ def inverse_document_frequency(corpus_size: int, document_frequency: int) -> flo
     """How much a term's presence should count.
 
     A word on every page carries no signal. The 0.5 offsets are the standard
-    BM25 smoothing, and the `max(..., 0)` floor matters: a term appearing on
-    more than half the pages otherwise scores *negative*, and a page could
-    improve its rank by not matching the query.
+    BM25 smoothing, and the `1.0 +` inside the log is what keeps the result
+    non-negative: Robertson's original form, `log((N - df + 0.5)/(df + 0.5))`,
+    goes negative once a term is on more than half the pages, and then a page
+    improves its rank by *not* matching the query. This is the variant Lucene
+    uses for that reason.
+
+    Given that, `max(..., 0)` only ever fires when `df > N` -- a term recorded
+    on more pages than the corpus knows about, which means the index and the
+    corpus have disagreed. Kept as a guard rather than removed, because the
+    alternative is a negative score propagating silently into a ranking.
     """
     if corpus_size == 0 or document_frequency == 0:
         return 0.0

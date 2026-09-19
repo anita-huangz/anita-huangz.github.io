@@ -25,6 +25,13 @@ matplotlib.use("Agg")  # headless: no display in CI
 DATES = pd.bdate_range("2023-01-02", periods=60)
 
 
+def main_of():
+    """Imported lazily, as the tests above do, so fakes are installed first."""
+    from factor_sim.cli import main
+
+    return main
+
+
 def price_frame(tickers: list[str]) -> pd.DataFrame:
     """Deterministic synthetic closes, one column per ticker."""
     rng = np.random.default_rng(0)
@@ -261,3 +268,241 @@ class TestCommandLine:
         with pytest.raises(SystemExit) as exit:
             main(["--help"])
         assert exit.value.code == 0
+
+
+BASE = [
+    "--tickers", "AAA,BBB,CCC", "--start", "2023-01-02", "--end", "2023-03-24",
+    "--factors", "momentum", "--top-n", "2", "--rebalance-every", "5",
+]
+
+
+class TestCommandLineFailureModes:
+    """What the CLI does when the world does not cooperate.
+
+    Every one of these is a path a reader running it for the first time can
+    hit — a typo'd factor, a ticker Yahoo does not know, a benchmark that is
+    delisted — and none of them had ever been executed by a test.
+    """
+
+    @pytest.fixture(autouse=True)
+    def no_plots(self, monkeypatch):
+        monkeypatch.setattr(
+            "factor_sim.plotting.plot_nav", lambda *a, **k: None, raising=False
+        )
+        monkeypatch.setattr(
+            "factor_sim.plotting.plot_drawdown", lambda *a, **k: None, raising=False
+        )
+
+    def test_an_unknown_factor_lists_the_ones_that_exist(self, capsys):
+        from factor_sim.cli import main
+
+        assert main([*BASE[:8], "--factors", "vibes"]) == 2
+        err = capsys.readouterr().err
+        assert "unknown factor(s)" in err
+        assert "momentum" in err, "the error should name what is available"
+
+    def test_a_look_ahead_factor_warns_before_it_is_used(self, fake_yfinance, monkeypatch, capsys):
+        # value and size are scored from a present-day fundamentals snapshot
+        # applied to historical rebalances. That is look-ahead bias, and the
+        # run must say so rather than quietly reporting a flattering number.
+        import factor_sim.data as data
+
+        monkeypatch.setattr(
+            data,
+            "fetch_fundamentals",
+            lambda tickers: pd.DataFrame(
+                {"trailingPE": [20.0, 25.0, 30.0], "marketCap": [1e9, 2e9, 3e9]},
+                index=["AAA", "BBB", "CCC"],
+            ),
+        )
+        assert main_of()([*BASE, "--factors", "value", "--benchmark", "none"]) == 0
+        assert "look-ahead bias" in capsys.readouterr().err
+
+    def test_unreachable_market_data_is_an_operational_failure(self, monkeypatch, capsys):
+        import factor_sim.data as data
+
+        def down(*args, **kwargs):
+            raise RuntimeError("connection reset by peer")
+
+        monkeypatch.setattr(data, "download_prices", down)
+        # 1, not 2: nothing the caller typed was wrong.
+        assert main_of()(BASE) == 1
+        assert "failed to load market data" in capsys.readouterr().err
+
+    def test_a_missing_benchmark_degrades_to_a_run_without_one(
+        self, fake_yfinance, monkeypatch, capsys
+    ):
+        # The benchmark is a separate download precisely so it cannot enter the
+        # tradable universe. When it fails, the backtest is still worth having.
+        import factor_sim.data as data
+
+        real = data.download_prices
+
+        def only_the_universe(tickers, *args, **kwargs):
+            if tickers == ["DELISTED"]:
+                raise RuntimeError("no data for DELISTED")
+            return real(tickers, *args, **kwargs)
+
+        monkeypatch.setattr(data, "download_prices", only_the_universe)
+        assert main_of()([*BASE, "--benchmark", "DELISTED"]) == 0
+        captured = capsys.readouterr()
+        assert "skipping the benchmark comparison" in captured.err
+        assert "Annualised" in captured.out or captured.out.strip()
+
+    def test_none_skips_the_benchmark_without_downloading_it(
+        self, fake_yfinance, monkeypatch, capsys
+    ):
+        import factor_sim.data as data
+
+        asked: list = []
+        real = data.download_prices
+
+        def record(tickers, *args, **kwargs):
+            asked.append(tickers)
+            return real(tickers, *args, **kwargs)
+
+        monkeypatch.setattr(data, "download_prices", record)
+        assert main_of()([*BASE, "--benchmark", "none"]) == 0
+        capsys.readouterr()
+        assert asked == [["AAA", "BBB", "CCC"]], "no second download for a benchmark"
+
+    def test_an_empty_benchmark_string_is_treated_as_none(self, fake_yfinance, capsys):
+        assert main_of()([*BASE, "--benchmark", "  "]) == 0
+        capsys.readouterr()
+
+    def test_a_benchmark_that_cannot_be_compared_says_so_and_keeps_going(
+        self, fake_yfinance, monkeypatch, capsys
+    ):
+        import factor_sim.cli as cli
+
+        def refuse(*args, **kwargs):
+            raise ValueError("no overlapping dates")
+
+        monkeypatch.setattr(cli, "benchmark_metrics", refuse)
+        assert main_of()([*BASE, "--benchmark", "SPY"]) == 0
+        assert "benchmark comparison unavailable" in capsys.readouterr().err
+
+    def test_drawdowns_zero_omits_the_section_entirely(self, fake_yfinance, capsys):
+        assert main_of()([*BASE, "--benchmark", "none", "--drawdowns", "0"]) == 0
+        assert "Worst" not in capsys.readouterr().out
+
+
+class TestOptionalSections:
+    @pytest.fixture(autouse=True)
+    def no_plots(self, monkeypatch):
+        monkeypatch.setattr(
+            "factor_sim.plotting.plot_nav", lambda *a, **k: None, raising=False
+        )
+        monkeypatch.setattr(
+            "factor_sim.plotting.plot_drawdown", lambda *a, **k: None, raising=False
+        )
+
+    def test_attribution_is_printed_when_asked_for(self, fake_yfinance, monkeypatch, capsys):
+        import factor_sim.attribution as attribution
+        import factor_sim.data as data
+
+        monkeypatch.setattr(
+            data,
+            "load_fama_french",
+            lambda *a, **k: pd.DataFrame(
+                {"Mkt-RF": 0.0001, "SMB": 0.0, "HML": 0.0, "RF": 0.0}, index=DATES
+            ),
+        )
+        monkeypatch.setattr(
+            attribution,
+            "attribute",
+            lambda *a, **k: types.SimpleNamespace(render=lambda: "alpha 0.00%"),
+        )
+        assert main_of()([*BASE, "--benchmark", "none", "--attribution"]) == 0
+        assert "alpha 0.00%" in capsys.readouterr().out
+
+    def test_attribution_failing_does_not_fail_the_run(
+        self, fake_yfinance, monkeypatch, capsys
+    ):
+        # The Fama-French factors come from a third-party download. Losing them
+        # should cost a section, not the whole backtest the user waited for.
+        import factor_sim.data as data
+
+        def unavailable(*a, **k):
+            raise RuntimeError("Ken French's site is down")
+
+        monkeypatch.setattr(data, "load_fama_french", unavailable)
+        assert main_of()([*BASE, "--benchmark", "none", "--attribution"]) == 0
+        assert "attribution unavailable" in capsys.readouterr().err
+
+    def test_plot_draws_both_figures(self, fake_yfinance, monkeypatch, capsys):
+        drawn: list[str] = []
+        monkeypatch.setattr(
+            "factor_sim.plotting.plot_nav", lambda *a, **k: drawn.append("nav")
+        )
+        monkeypatch.setattr(
+            "factor_sim.plotting.plot_drawdown", lambda *a, **k: drawn.append("dd")
+        )
+        assert main_of()([*BASE, "--benchmark", "none", "--plot"]) == 0
+        capsys.readouterr()
+        assert drawn == ["nav", "dd"]
+
+
+class TestPlots:
+    """The figures themselves, rendered headless and inspected."""
+
+    @staticmethod
+    def nav() -> pd.DataFrame:
+        values = np.concatenate([np.linspace(100, 140, 30), np.linspace(140, 110, 30)])
+        return pd.DataFrame({"NAV": values}, index=DATES)
+
+    def test_the_nav_plot_is_labelled_in_dollars(self):
+        import matplotlib.pyplot as plt
+
+        from factor_sim.plotting import plot_nav
+
+        figure = plot_nav(self.nav(), show=False)
+        assert "$" in figure.axes[0].get_ylabel()
+        plt.close(figure)
+
+    def test_the_drawdown_plot_is_never_positive(self):
+        # Drawdown is plotted as a negative fill from the running peak. A
+        # positive value would mean the peak logic is inverted.
+        import matplotlib.pyplot as plt
+
+        from factor_sim.plotting import plot_drawdown
+
+        figure = plot_drawdown(self.nav(), show=False)
+        paths = figure.axes[0].collections[0].get_paths()
+        assert min(v[1] for p in paths for v in p.vertices) < 0
+        assert max(v[1] for p in paths for v in p.vertices) <= 1e-12
+        plt.close(figure)
+
+    @pytest.mark.parametrize("name", ["plot_nav", "plot_drawdown"])
+    def test_show_is_honoured(self, monkeypatch, name):
+        import matplotlib.pyplot as plt
+
+        import factor_sim.plotting as plotting
+
+        shown: list[int] = []
+        monkeypatch.setattr(plt, "show", lambda *a, **k: shown.append(1))
+        plt.close(getattr(plotting, name)(self.nav(), show=True))
+        assert shown == [1]
+
+
+class TestPriceLookup:
+    """`Security.price_on` — the one place a missing bar becomes a decision."""
+
+    @staticmethod
+    def security(values, index=None):
+        from factor_sim.portfolio import Security
+
+        return Security(ticker="AAA", prices=pd.Series(values, index=index or DATES[: len(values)]))
+
+    def test_a_known_day_gives_its_price(self):
+        assert self.security([10.0, 11.0]).price_on(DATES[1]) == 11.0
+
+    def test_a_day_with_no_bar_is_none_rather_than_an_error(self):
+        # A holiday or a pre-IPO date. Returning None lets the caller skip the
+        # name; raising would abort a rebalance over one absent ticker.
+        assert self.security([10.0, 11.0]).price_on(DATES[40]) is None
+
+    def test_a_nan_price_is_treated_as_absent_not_as_zero(self):
+        # The difference matters: NaN propagating into a weight makes the whole
+        # portfolio NaN, and 0.0 would look like a total loss.
+        assert self.security([10.0, float("nan")]).price_on(DATES[1]) is None

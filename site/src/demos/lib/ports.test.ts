@@ -399,11 +399,28 @@ describe("BM25 ranking", () => {
     }
   });
 
-  it("floors the IDF so a common term never scores negative", () => {
-    // "city" is on 3 of 4 pages. Without the floor its IDF goes negative and
-    // a page improves its rank by not matching.
-    expect(inverseDocumentFrequency(4, 3)).toBeGreaterThanOrEqual(0);
-    expect(inverseDocumentFrequency(100, 99)).toBeGreaterThanOrEqual(0);
+  it("uses the smoothed IDF, which stays positive where Robertson's goes negative", () => {
+    // The `1 +` inside the log is doing this, not the max(): "city" on 3 of 4
+    // pages scores positive here and negative under the original form. An
+    // earlier version of this test credited the floor, and passed for the
+    // wrong reason -- the floor is unreachable for any df <= N.
+    const robertson = (n: number, df: number) =>
+      Math.log((n - df + 0.5) / (df + 0.5));
+
+    for (const [n, df] of [[4, 3], [100, 99], [10, 6]] as const) {
+      expect(robertson(n, df)).toBeLessThan(0);
+      expect(inverseDocumentFrequency(n, df)).toBeGreaterThan(0);
+    }
+  });
+
+  it("floors the IDF only when the index claims more pages than the corpus has", () => {
+    // The one case max(…, 0) exists for: df > N means the index and the
+    // corpus disagree, and the raw value really is negative.
+    expect(inverseDocumentFrequency(10, 11)).toBe(0);
+    expect(inverseDocumentFrequency(10, 20)).toBe(0);
+  });
+
+  it("never scores a golden hit negative", () => {
     for (const testCase of golden.cases) {
       for (const hit of testCase.hits) expect(hit.score).toBeGreaterThanOrEqual(0);
     }

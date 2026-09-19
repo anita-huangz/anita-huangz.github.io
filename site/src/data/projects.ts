@@ -183,7 +183,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A list of tickers, a date range, which factors to use, how many names to hold, and how often to rebalance.",
       "output": "A daily NAV path, per-rebalance weights, total and annualized return, volatility, Sharpe, max drawdown, and a Fama-French attribution table.",
-      "scale": "87 tests. The bundled demo runs 62 tickers over six years of real daily closes."
+      "scale": "105 tests. The bundled demo runs 62 tickers over six years of real daily closes."
     },
     "sources": [
       {
@@ -261,7 +261,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A start URL and a link depth, then a query: words, `par*` for a prefix, `d?g` for a wildcard.",
       "output": "Pages ranked by BM25, each showing its score and which terms matched how many times. Plus a report of pages that could not be fetched.",
-      "scale": "165 tests, no network. Crawl is capped by depth, page count, and a URL allowlist."
+      "scale": "195 tests, no network. Crawl is capped by depth, page count, and a URL allowlist."
     }
   },
   {
@@ -328,7 +328,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A quarter (`2026-27/winter`, or `current`), plus either a search -- code prefix, keyword, day -- or a request: how many courses, which are required, which days to keep free, nothing before a given time.",
       "output": "Matching courses, or the best conflict-free schedules ranked by cost with the penalty that drove each, how many courses were set aside for having no published time, the nodes searched, and whether optimality was proven.",
-      "scale": "161 tests, all offline: the real listing pages are saved as fixtures and the transport is faked. 48 quarters available live; a 30-course quarter searches in a few hundred nodes."
+      "scale": "190 tests, all offline: the real listing pages are saved as fixtures and the transport is faked. 48 quarters available live; a 30-course quarter searches in a few hundred nodes."
     },
     "sources": [
       {
