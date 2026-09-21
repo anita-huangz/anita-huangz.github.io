@@ -1,0 +1,5 @@
+# The repository routes *.csv through Git LFS for the large datasets. This
+# 594 KB curve snapshot is packaged with the library and read by every test,
+# and actions/checkout does not fetch LFS content -- so under LFS CI receives
+# a pointer file and nothing loads.
+src/curve_lab/data/*.csv -filter -diff -merge text

@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**2,591 tests** — 1,911 in Python, and 680 in the browser, most of them
+**2,771 tests** — 2,091 in Python, and 680 in the browser, most of them
 cross-checking the site's TypeScript ports against fixtures the Python
 generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
@@ -327,7 +327,41 @@ Gone: `adjust_factor_weights_based_on_regression`, which multiplied a loading
 by 1.5 above 0.5 and 1.2 above 0.2 — six unjustified constants.
 **Python · NumPy · pandas · SciPy · scikit-learn (tests only)**
 
-### 4. ✅ [Earnings Drift Tracker](markets/earnings-drift-tracker) · 79 tests
+### 4. ✅ [Yield Curve Lab](markets/yield-curve-lab) · 180 tests
+
+Nine Treasury tenors, 1981 to 2026. What the curve actually does, what a curve
+trade is really exposed to, and whether any of it can be forecast.
+
+**In** — a strategy in plain English: *"factor-neutral 1s2s5s since 2010,
+weekly, 1bp"*, parsed by keyword into a range-checked config.
+**Out** — the curve's factor decomposition, what share of a trade's risk sits in
+each factor, a P&L backtest split into direction, carry, roll-down and cost, and
+a walk-forward forecast scored against a random walk.
+
+Three principal components on daily changes explain **95.1%** of every move the
+curve made in forty-five years — level, slope and curvature, read off the
+loadings rather than assumed.
+
+- **The standard butterfly does not trade what it is named for.** A DV01-neutral
+  2s5s10s fly puts **0.9%** of its risk in curvature; 99.1% is level and slope.
+  The curvature factor's trough is at the 2-year, not the 5-year, so the fly is
+  centred on that factor's zero crossing.
+- **Placement beats weighting.** Solving for factor-neutral weights gets 100%
+  curvature but loses DV01 neutrality. Just moving the fly to 1s2s5s gets
+  **95.2%** with the plain 50-50 weights and stays DV01-neutral.
+- **The return was never directional.** Over 2000–2026 the three flies earned
+  −5, +16 and −1 dollars from direction, against 497–571 from carry. They are
+  carry harvests with a curve view attached that contributed nothing.
+- **66 features and gradient boosting lose to a random walk** at every factor —
+  out-of-sample R² of −0.49 to −0.60, directional accuracy ~51%.
+- **DuckDB, not Snowflake**, so it runs offline in CI with no credentials. The
+  SQL ports; the setup cost does not.
+
+**Python · DuckDB · SQL · XGBoost · scikit-learn · pandas · NumPy · SciPy · pytest**
+
+---
+
+### 5. ✅ [Earnings Drift Tracker](markets/earnings-drift-tracker) · 79 tests
 
 Measures post-earnings-announcement drift against the size of the analyst
 surprise — **as abnormal return**, not raw return, because a stock that rose 2%
