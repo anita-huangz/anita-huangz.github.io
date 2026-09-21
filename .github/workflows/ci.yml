@@ -31,6 +31,7 @@ jobs:
           - markets/earnings-drift-tracker
           - markets/factor-based-portfolio-simulator
           - markets/stock-bond-portfolio-analysis
+          - markets/yield-curve-lab
 
           - inference/customer-churn-prediction
           - inference/fake-news-detection

@@ -115,6 +115,48 @@ export const PROJECTS: Project[] = [
     }
   },
   {
+    "slug": "yield-curve-lab",
+    "title": "Yield Curve Lab",
+    "category": "markets",
+    "summary": "Nine Treasury tenors over forty-five years \u2014 what the curve actually does, what a curve trade is really exposed to, and whether any of it can be forecast. The standard butterfly turns out to trade 0.9% curvature.",
+    "detail": "Principal components on daily changes across 11,261 days recover level, slope and curvature, and three of them account for 95.1% of every move the curve made since 1981. That decomposition is then used to audit the trade built on it. A 2s5s10s butterfly weighted the textbook way \u2014 legs sized so the position has no net DV01 \u2014 is sold as a pure curvature bet, and 0.9% of its P&L variance is curvature; 37.4% is level and 61.7% is slope. The reason is placement: the curvature factor's trough sits at the 2-year, not the 5-year, so the conventional fly centres its belly almost exactly on that factor's zero crossing. Solving for factor-neutral weights gets 100% curvature and loses the DV01 neutrality it was sized for; simply moving the fly to 1s2s5s gets 95.2% with the plain 50-50 weights and keeps it. The backtest then asks what any of it earned: over 2000\u20132026 the three flies made \u22125, +16 and \u22121 dollars from direction against 497\u2013571 from carry, so they are carry harvests with a curve view attached that contributed nothing \u2014 which is consistent with 66 engineered features and gradient boosting losing to a random walk at every factor, out-of-sample R\u00b2 of \u22120.49 to \u22120.60.",
+    "tech": [
+      "Python",
+      "DuckDB",
+      "SQL",
+      "XGBoost",
+      "scikit-learn",
+      "pandas",
+      "NumPy",
+      "SciPy",
+      "pytest"
+    ],
+    "path": "markets/yield-curve-lab",
+    "rank": 2,
+    "tests": 180,
+    "highlights": [
+      "Three principal components on daily changes explain 95.1% of forty-five years of curve movement, with level, slope and curvature read off the loadings rather than assumed",
+      "A DV01-neutral 2s5s10s butterfly carries 0.9% curvature risk and 99.1% level and slope \u2014 it does not trade the thing it is named for",
+      "The curvature factor's trough is at the 2-year, so moving the fly to 1s2s5s gets 95.2% curvature from plain weights while staying DV01-neutral: placement beats weighting",
+      "P&L is decomposed into direction, carry, roll-down and cost, which is what shows the directional component was worth \u2212$5 over twenty-six years",
+      "66 features into walk-forward gradient boosting lose to a random walk at every factor, with a paired test on squared errors putting t at +25 to +28",
+      "DuckDB carries the curve and builds features as SQL window functions, framed PRECEDING-to-1-PRECEDING so a rolling mean cannot see the day it sits on",
+      "Plain-English strategy parsing into a range-checked config, so execution stays deterministic however the request was phrased"
+    ],
+    "io": {
+      "input": "A strategy in plain English \u2014 e.g. \"factor-neutral 1s2s5s since 2010, weekly, 1bp\" \u2014 parsed by keyword into a validated configuration.",
+      "output": "The curve's factor decomposition, each trade's risk split across level/slope/curvature, a backtest whose P&L is separated into direction, carry, roll-down and cost, and a walk-forward forecast scored against a random walk.",
+      "scale": "180 tests, all offline. 11,261 days x 9 tenors, 1981 to 2026, in a 594 KB committed snapshot."
+    },
+    "sources": [
+      {
+        "label": "FRED \u2014 Treasury constant maturity rates",
+        "url": "https://fred.stlouisfed.org/categories/115",
+        "note": "Daily par yields per tenor. Free, no key. The 20-year is excluded: it has a 6.75-year issuance gap that an inner join would hide."
+      }
+    ]
+  },
+  {
     "slug": "earnings-drift-tracker",
     "rank": 4,
     "title": "Earnings Drift Tracker",
