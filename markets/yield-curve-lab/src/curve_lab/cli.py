@@ -68,14 +68,23 @@ def trade_report(curve, factors, strategy: Strategy) -> None:
     )
 
 
-def backtest_report(curve, factors, strategy: Strategy) -> None:
+def backtest_report(curve, factors, strategy: Strategy, look_ahead: bool = False) -> None:
+    """Backtest the window, with the weights a trader could actually have set.
+
+    The factor model is refitted on the backtest window unless `look_ahead` is
+    on. That is not a technicality: fitting it on all forty-five years and then
+    trading only the 2000s turns the factor-neutral 2s5s10s from +$143 to
+    -$232. The curve of the early 1980s was a different animal, and loadings
+    fitted across both eras fit neither.
+    """
     _heading("WHAT IT EARNED")
     window = curve.slice(strategy.start, strategy.end)
+    basis = factors if look_ahead else fit_factors(window)
     config = BacktestConfig(rebalance_days=strategy.rebalance_days, cost_bp=strategy.cost_bp)
     builder = (
-        dv01_neutral_weights(factors.tenors, strategy.wings, strategy.belly)
+        dv01_neutral_weights(basis.tenors, strategy.wings, strategy.belly)
         if strategy.weighting == "dv01"
-        else factor_neutral_weights(factors, strategy.wings, strategy.belly)
+        else factor_neutral_weights(basis, strategy.wings, strategy.belly)
     )
     result = run_backtest(window, builder, config)
     performance = summarise(result.total)
@@ -100,6 +109,12 @@ def backtest_report(curve, factors, strategy: Strategy) -> None:
         "\n  Carry and roll-down needed no view on rates. The directional line is\n"
         "  what the position earned for being right about direction."
     )
+    if look_ahead:
+        print(
+            "\n  note: --look-ahead is on, so the factor model was fitted on the whole\n"
+            "  history including everything after the start date. These weights could\n"
+            "  not have been set at the time."
+        )
 
 
 def carry_report(curve, strategy: Strategy) -> None:
@@ -172,6 +187,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--section", choices=SECTIONS, default="all")
     parser.add_argument("--start", default=None, help="ISO date; overrides --strategy.")
     parser.add_argument("--end", default=None, help="ISO date; overrides --strategy.")
+    parser.add_argument(
+        "--look-ahead",
+        action="store_true",
+        help="Fit the factor model on the whole history rather than the backtest "
+        "window. Reproduces the look-ahead, which is worth a sign flip here.",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -207,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     if want in {"all", "trade"}:
         trade_report(curve, factors, strategy)
     if want in {"all", "backtest"}:
-        backtest_report(curve, factors, strategy)
+        backtest_report(curve, factors, strategy, look_ahead=args.look_ahead)
     if want in {"all", "carry"}:
         carry_report(curve, strategy)
     if want in {"all", "regimes"}:

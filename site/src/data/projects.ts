@@ -133,7 +133,7 @@ export const PROJECTS: Project[] = [
     ],
     "path": "markets/yield-curve-lab",
     "rank": 2,
-    "tests": 180,
+    "tests": 183,
     "highlights": [
       "Three principal components on daily changes explain 95.1% of forty-five years of curve movement, with level, slope and curvature read off the loadings rather than assumed",
       "A DV01-neutral 2s5s10s butterfly carries 0.9% curvature risk and 99.1% level and slope \u2014 it does not trade the thing it is named for",
@@ -146,7 +146,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A strategy in plain English \u2014 e.g. \"factor-neutral 1s2s5s since 2010, weekly, 1bp\" \u2014 parsed by keyword into a validated configuration.",
       "output": "The curve's factor decomposition, each trade's risk split across level/slope/curvature, a backtest whose P&L is separated into direction, carry, roll-down and cost, and a walk-forward forecast scored against a random walk.",
-      "scale": "180 tests, all offline. 11,261 days x 9 tenors, 1981 to 2026, in a 594 KB committed snapshot."
+      "scale": "183 tests, all offline. 11,261 days x 9 tenors, 1981 to 2026, in a 594 KB committed snapshot."
     },
     "sources": [
       {

@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 
 import { CacheDemo } from "./components/CacheDemo";
 import { CardsDemo } from "./components/CardsDemo";
+import { CurveDemo } from "./components/CurveDemo";
 import { EarningsDemo } from "./components/EarningsDemo";
 import { FactorDemo } from "./components/FactorDemo";
 import { PianoDemo } from "./components/PianoDemo";
@@ -27,6 +28,10 @@ export const DEMOS: Record<string, { title: string; component: ComponentType }> 
   "factor-based-portfolio-simulator": {
     title: "Run the backtest",
     component: FactorDemo,
+  },
+  "yield-curve-lab": {
+    title: "Build a curve trade",
+    component: CurveDemo,
   },
   "earnings-drift-tracker": {
     title: "Explore the drift",
