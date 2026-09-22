@@ -168,3 +168,51 @@ class TestCommandLine:
         with pytest.raises(SystemExit) as exit:
             main(["--help"])
         assert exit.value.code == 0
+
+
+class TestLookAhead:
+    """Which curve the factor model is fitted on, and what it is worth.
+
+    This is not a technicality. An earlier README asserted that fitting the
+    PCA on the whole sample "changes little"; it changes the sign of the
+    answer, which is why the default is now the window and the other one is
+    behind a flag that announces itself.
+    """
+
+    @staticmethod
+    def run(window_start: str, look_ahead: bool):
+        from curve_lab import load
+        from curve_lab.backtest import BacktestConfig, run_backtest
+        from curve_lab.pca import fit_factors
+        from curve_lab.risk import summarise
+        from curve_lab.trades import factor_neutral_weights
+
+        full = load()
+        window = full.slice(window_start, None)
+        basis = fit_factors(full) if look_ahead else fit_factors(window)
+        fly = factor_neutral_weights(basis, ("DGS2", "DGS10"), "DGS5")
+        result = run_backtest(window, fly, BacktestConfig(rebalance_days=21, cost_bp=0.5))
+        return summarise(result.total)
+
+    def test_fitting_on_everything_flips_the_sign_of_the_result(self):
+        honest = self.run("2000-01-01", look_ahead=False)
+        leaky = self.run("2000-01-01", look_ahead=True)
+        assert honest.total > 0
+        assert leaky.total < 0
+        assert honest.information_ratio > 0 > leaky.information_ratio
+
+    def test_the_cli_defaults_to_the_honest_fitting(self, capsys):
+        assert main(["--strategy", "factor-neutral 2s5s10s since 2000, monthly",
+                     "--section", "backtest"]) == 0
+        out = capsys.readouterr().out
+        assert "look-ahead" not in out
+        assert "$143" in out
+
+    def test_the_flag_reproduces_the_look_ahead_and_says_so(self, capsys):
+        assert main(["--strategy", "factor-neutral 2s5s10s since 2000, monthly",
+                     "--section", "backtest", "--look-ahead"]) == 0
+        out = capsys.readouterr().out
+        assert "$-232" in out
+        # The sentence wraps, so match a fragment that does not straddle the break.
+        assert "--look-ahead is on" in out
+        assert "not have been set at the time" in out

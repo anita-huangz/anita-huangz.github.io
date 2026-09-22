@@ -104,6 +104,22 @@ autocorrelated and the t-statistic overstates significance. It does not matter
 here — the sign is wrong, not just the magnitude — but it would if the result
 were marginal.
 
+## What the factor model is fitted on
+
+The backtest above refits the PCA on the window it trades, so the weights use
+only data a trader would have had. Fitting it once on all 45 years instead — the
+obvious shortcut — is look-ahead, and on the factor-neutral 2s5s10s from 2000 it
+is the difference between:
+
+| factor model fitted on | total | IR | max drawdown |
+|---|---|---|---|
+| the 2000–2026 window | **+$143** | +0.24 | −$178 |
+| all 45 years | **−$232** | −0.37 | −$299 |
+
+Same trade, same data, same costs; the only difference is which curve taught the
+weights. `--look-ahead` turns it on, and the browser demo has it as a checkbox so
+you can watch the sign change.
+
 ## Regimes and cycles
 
 K-means on curve *shapes* (each day standardised across tenors, so a 16% curve
@@ -161,11 +177,12 @@ looks brilliant and predicts nothing, and a test asserts it does not.
 
 ```bash
 pip install -e ".[dev]"      # add [predict] for XGBoost alone
-pytest -q                    # 180 tests
+pytest -q                    # 183 tests
 
 curve-lab                                    # every section
 curve-lab --section trade
 curve-lab --strategy "factor-neutral 1s2s5s since 2010, weekly, 1bp"
+curve-lab --section backtest --look-ahead    # refit on everything, and see
 ```
 
 The strategy sentence is parsed by keyword, not by a model, into a `Strategy`
@@ -220,11 +237,15 @@ assumption — that it must have a gap too — would have it dropped for no reas
 - **Costs are a flat half basis point per unit of DV01.** Real bid-offer varies
   by tenor, by issue, and by how much the market is moving; the 3-month bill and
   the 30-year bond do not trade at the same spread.
-- **The factor model is fitted on the whole sample.** The PCA that defines
-  "level, slope, curvature" uses all 45 years, including days the backtest then
-  trades through. Refitting on a rolling window is the honest construction; the
-  loadings are stable enough that it changes little, but "enough" is asserted
-  here rather than measured.
+- **The factor model is refitted on the backtest window, and it matters.** An
+  earlier version of this README asserted that fitting it on the whole sample
+  "changes little". Measured, it does not: fitting on all 45 years and then
+  trading only 2000 onwards takes the factor-neutral 2s5s10s from **+$143 to
+  −$232**, a sign flip rather than a rounding difference. The curve of the early
+  1980s was a different animal, and loadings fitted across both eras fit
+  neither. The default is now the honest construction — weights use only the
+  window being traded — and `--look-ahead` reproduces the other one, with a
+  warning. An expanding-window refit would be better still and is not done.
 - **95.1% is not 100%.** Three factors leave 4.9% of curve variance unexplained,
   and a trade reported as "100% curvature" is 100% of the part the model sees.
 - **The FFT peaks are marginal and this is one dataset.** Two of three clear a

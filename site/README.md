@@ -16,7 +16,7 @@ timetable builder, a playable card game, and an LRU eviction visualiser.
 ```bash
 npm install
 npm run dev       # http://localhost:5173
-npm test          # 680 tests: the ports against the Python's answers
+npm test          # 735 tests: the ports against the Python's answers
 npm run build     # production bundle for GitHub Pages
 npm run preview   # serve the built bundle locally
 ```

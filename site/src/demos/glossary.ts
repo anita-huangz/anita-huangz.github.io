@@ -28,6 +28,50 @@ export interface GlossaryEntry {
 }
 
 export const GLOSSARY: Record<string, GlossaryEntry> = {
+  // ------------------------------------------------------------------ rates
+  "curve-factor": {
+    term: "Curve factor",
+    body:
+      "Nine Treasury yields do not move independently — when the ten-year " +
+      "sells off the seven-year almost always does too. A principal component " +
+      "is one of the independent movements underneath: a shape the whole curve " +
+      "moves in, plus a number saying how much of the total movement it " +
+      "accounts for.",
+    here:
+      "Three of them cover 95% of everything the curve did in forty-five " +
+      "years. The first shifts every tenor together (level), the second tilts " +
+      "the ends against each other (slope), the third moves the middle against " +
+      "both ends (curvature).",
+    // Deliberately not aliased to "factor" or "pca". Both already exist
+    // here meaning other things -- an equity factor like momentum, and
+    // PCA used to squash columns into two dimensions for a scatter plot.
+    aliases: ["level slope curvature"],
+  },
+  dv01: {
+    term: "DV01",
+    body:
+      "What a bond position gains or loses if its yield moves by one basis " +
+      "point — a hundredth of a percent. It is how size is measured in rates, " +
+      "because $10m of two-year and $10m of thirty-year are wildly different " +
+      "amounts of risk, while $1,000 of DV01 in each is the same.",
+    here:
+      "Every trade here is sized per $1 of DV01 on the belly leg, so the P&L " +
+      "is comparable across trades and across eras. \"DV01-neutral\" means the " +
+      "legs cancel: a parallel move in all yields nets to zero.",
+    aliases: ["dollar value of a basis point", "duration", "dv01-neutral"],
+  },
+  carry: {
+    term: "Carry",
+    body:
+      "The yield a bond pays you simply for holding it, before anything moves. " +
+      "It needs no forecast: if the curve sat perfectly still, carry is what " +
+      "you would still earn.",
+    here:
+      "It is kept in its own column precisely so it can be told apart from the " +
+      "part that needed a view. On these butterflies, carry is essentially the " +
+      "whole return and the directional part is worth about nothing.",
+    aliases: ["roll-down", "rolldown", "carry and roll"],
+  },
   // ----------------------------------------------------------------- markets
   backtest: {
     term: "Backtest",
