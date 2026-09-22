@@ -8,7 +8,8 @@ install:  ## Editable install with the dev and predict extras
 	cd api && npm install
 	cd web && npm install
 
-test:  ## Every suite: Python, the BFF, and the browser port on the portfolio site
+test:  ## The Python engine and the BFF. The browser port lives in site/ and is
+       ## tested there, against fixtures this package generates.
 	pytest -q --cov --cov-report=term-missing
 	cd api && npm test
 

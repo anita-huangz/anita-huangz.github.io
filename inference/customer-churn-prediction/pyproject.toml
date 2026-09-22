@@ -7,7 +7,10 @@ name = "churn"
 version = "0.1.0"
 description = "Survival analysis and decision modelling for customer churn."
 requires-python = ">=3.11"
-dependencies = ["numpy>=1.26", "pandas>=2.0", "scikit-learn>=1.4"]
+# scipy is imported directly by survival.py, not just pulled in behind
+# scikit-learn. It arrives either way today, but a package that imports a
+# module it does not declare is one dependency bump away from not.
+dependencies = ["numpy>=1.26", "pandas>=2.0", "scikit-learn>=1.4", "scipy>=1.11"]
 
 [project.optional-dependencies]
 # statsmodels is a *test* dependency only: the Cox and Kaplan-Meier
