@@ -198,8 +198,34 @@ describe("butterfly construction against Python", () => {
     expect(exposure[1]).toBeCloseTo(0, 10);
   });
 
-  it("refuses wings that are the same tenor", () => {
+  it("refuses a belly outside its wings, like the Python engine does", () => {
+    expect(() => dv01NeutralWeights(factors, ["DGS10", "DGS30"], "DGS2")).toThrow(
+      /belly between its wings/,
+    );
+    expect(() => factorNeutralWeights(factors, ["DGS10", "DGS30"], "DGS2")).toThrow(
+      /belly between its wings/,
+    );
+  });
+
+  it("refuses a tenor the curve does not carry", () => {
+    expect(() => dv01NeutralWeights(factors, ["DGS2", "DGS99"], "DGS5")).toThrow(/no tenor/);
+  });
+
+  it("refuses the same tenor twice, as not being a butterfly at all", () => {
     expect(() => factorNeutralWeights(factors, ["DGS2", "DGS2"], "DGS5")).toThrow(
+      /belly between its wings/,
+    );
+  });
+
+  it("refuses wings that load alike rather than least-squaring them", () => {
+    // Unreachable with the real curve once the ordering check is in front of
+    // it, so the degenerate factor model is built explicitly -- same as the
+    // Python test of the same name.
+    const bad = { ...factors, loadings: factors.loadings.map((row) => row.slice()) };
+    const two = factors.tenors.indexOf("DGS2");
+    const ten = factors.tenors.indexOf("DGS10");
+    for (const row of bad.loadings) row[ten] = row[two]!;
+    expect(() => factorNeutralWeights(bad, ["DGS2", "DGS10"], "DGS5")).toThrow(
       /not identified/,
     );
   });

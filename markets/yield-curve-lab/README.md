@@ -144,10 +144,75 @@ cycle in a random walk. The 63-day peak in curvature is about a quarter, which
 is the Treasury refunding cycle; the 5-day one is a pixel above the line and
 should not be traded.
 
+## Running it as a service
+
+The CLI answers one question at a time. The service answers them over HTTP, and
+does one thing the browser demo on the portfolio site cannot: **refit the
+walk-forward forecast on request**, for any window, factor and horizon. XGBoost
+does not train in a browser, so there the grid is precomputed; here it is not.
+
+```bash
+make up          # everything in Docker, on http://localhost:8080
+```
+
+Three pieces, and each is there for a reason:
+
+```
+web/    React + Vite      the client
+api/    Node + Express    cache, validation, fan-out, and it serves the client
+src/    Python + FastAPI  the quant engine, and the only thing that computes
+```
+
+**The engine** holds the curve and does the maths. It is the same `curve_lab`
+the CLI imports, so there is one implementation of a DV01 in this repo.
+
+**The BFF** holds no domain logic at all — if it ever computes a DV01 there are
+two implementations and they will drift. What it does:
+
+- *Caches.* Every answer is a deterministic function of a committed file, so a
+  repeated request is free. Measured: a backtest goes 0.64s → 0.6ms and a
+  forecast 0.98s → 0.7ms. The cache is bounded and LRU, because the key space
+  is every combination of legs, dates, rebalance and cost; and it reports its
+  hit rate on `/api/health`, because a cache nobody measures is a memory leak
+  with extra steps.
+- *Validates at the edge.* A 90bp cost is a 400 from Node rather than a round
+  trip and a stack unwind in Python. The bounds are the engine's bounds, so a
+  request that passes here cannot fail validation there.
+- *Fans out.* The overview page needs factors, the decomposition and a
+  backtest: three engine calls issued together, one browser round trip.
+- *Serves the client*, so there is no CORS in production.
+
+Honest note on the shape: a single FastAPI service would also work and would be
+one fewer thing to run. The BFF earns its place on the caching and the fan-out,
+and those are measured above rather than asserted — but it is a real trade for
+a second process.
+
+```
+GET  /api/health              engine status and cache hit rate
+GET  /api/curve/summary       coverage per tenor, from DuckDB
+POST /api/factors             PCA over a window
+POST /api/trade               the risk decomposition
+POST /api/backtest            P&L split by source
+POST /api/carry               carry and roll-down per tenor
+POST /api/forecast            walk-forward XGBoost, refit per request
+POST /api/cycles              the FFT, against its noise threshold
+POST /api/strategy/parse      plain English to the validated object
+POST /api/overview            factors + trade + backtest in one round trip
+```
+
+Without Docker, three shells:
+
+```bash
+make serve   # the engine on :8000
+make api     # the BFF on :8080
+make web     # Vite on :5173, proxying /api to :8080
+```
+
 ## The stack
 
 ```
 src/curve_lab/
+  service/       FastAPI over everything below
   data.py        loading, and refusing a curve with a hole in it
   warehouse.py   DuckDB: the long table, and features as window functions
   pca.py         level / slope / curvature, with the eigenvector signs pinned
@@ -160,6 +225,9 @@ src/curve_lab/
   predict.py     walk-forward XGBoost against a random walk
   intent.py      plain English to a validated config, no model
   cli.py         the command line above
+
+api/src/         the Express BFF: cache, validation, fan-out
+web/src/         the React client the BFF serves
 ```
 
 **DuckDB, not Snowflake.** This has to run offline in CI with no credentials, and
@@ -177,7 +245,7 @@ looks brilliant and predicts nothing, and a test asserts it does not.
 
 ```bash
 pip install -e ".[dev]"      # add [predict] for XGBoost alone
-pytest -q                    # 183 tests
+pytest -q                    # 209 tests
 
 curve-lab                                    # every section
 curve-lab --section trade

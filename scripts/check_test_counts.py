@@ -104,17 +104,30 @@ def badge_in_site_data(relative: str) -> tuple[str, int] | None:
     return "site/src/data/projects.ts (tests)", int(entry.group(1))
 
 
-def totals_line() -> tuple[int, int, int, int]:
-    """The headline `N tests -- P in Python, and B in the browser` figures."""
+def totals_line() -> tuple[int, int, int, int, int]:
+    """The headline figures: total, Python, browser, API, and the line number.
+
+    The API count is a third category rather than folded into "browser": the
+    BFF's suite runs in Node against a faked engine and never opens a browser,
+    and a total that quietly rounds those together is the kind of small
+    inaccuracy this script exists to prevent.
+    """
     text = (ROOT / "README.md").read_text()
     match = re.search(
-        r"\*\*([\d,]+) tests\*\*\s*—\s*([\d,]+) in Python, and ([\d,]+) in the browser",
+        r"\*\*([\d,]+) tests\*\*\s*—\s*([\d,]+) in Python, "
+        r"([\d,]+) in the browser, and ([\d,]+) against the API",
         text,
     )
     if not match:
         sys.exit("README.md no longer states a test total in the expected form")
     line = text[: match.start()].count("\n") + 1
-    return parse(match.group(1)), parse(match.group(2)), parse(match.group(3)), line
+    return (
+        parse(match.group(1)),
+        parse(match.group(2)),
+        parse(match.group(3)),
+        parse(match.group(4)),
+        line,
+    )
 
 
 def check_project(relative: str) -> list[str]:
@@ -150,7 +163,7 @@ def check_totals() -> list[str]:
     Each of those is verified against a real run by its own CI job, so checking
     the arithmetic here is enough to make the total trustworthy too.
     """
-    total, python_total, browser_total, line = totals_line()
+    total, python_total, browser_total, api_total, line = totals_line()
     listed = [
         parse(m) for m in re.findall(r"·\s*([\d,]+)\s+tests\b", (ROOT / "README.md").read_text())
     ]
@@ -160,18 +173,22 @@ def check_totals() -> list[str]:
             f"README.md:{line}: says {python_total:,} Python tests, but the "
             f"{len(listed)} projects listed below add up to {sum(listed):,}"
         )
-    if python_total + browser_total != total:
+    parts = python_total + browser_total + api_total
+    if parts != total:
         problems.append(
-            f"README.md:{line}: {python_total:,} + {browser_total:,} "
-            f"is {python_total + browser_total:,}, not {total:,}"
+            f"README.md:{line}: {python_total:,} + {browser_total:,} + {api_total:,} "
+            f"is {parts:,}, not {total:,}"
         )
     if not problems:
-        print(f"totals: {python_total:,} + {browser_total:,} = {total:,}, and the parts agree")
+        print(
+            f"totals: {python_total:,} + {browser_total:,} + {api_total:,} = "
+            f"{total:,}, and the parts agree"
+        )
     return problems
 
 
 def check_browser(actual: int) -> list[str]:
-    _, _, browser_total, line = totals_line()
+    _, _, browser_total, _, line = totals_line()
     problems = []
     if browser_total != actual:
         problems.append(
@@ -189,18 +206,29 @@ def check_browser(actual: int) -> list[str]:
     return problems
 
 
+def check_api(actual: int) -> list[str]:
+    _, _, _, api_total, line = totals_line()
+    if api_total != actual:
+        return [f"README.md:{line}: claims {api_total} API tests, the suite ran {actual}"]
+    print(f"api: {actual} tests, the total agrees")
+    return []
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("project", nargs="?", help="Project directory, e.g. systems/fastcache.")
     parser.add_argument("--browser", type=int, help="Test count vitest just reported.")
+    parser.add_argument("--api", type=int, help="Test count the BFF's suite just reported.")
     args = parser.parse_args(argv)
 
-    if args.browser is not None:
+    if args.api is not None:
+        problems = check_api(args.api)
+    elif args.browser is not None:
         problems = check_browser(args.browser)
     elif args.project:
         problems = check_project(args.project.rstrip("/")) + check_totals()
     else:
-        parser.error("pass a project directory or --browser N")
+        parser.error("pass a project directory, --browser N, or --api N")
 
     for problem in problems:
         print(f"error: {problem}", file=sys.stderr)

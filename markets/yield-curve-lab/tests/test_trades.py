@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from curve_lab.pca import fit_factors
+from curve_lab.pca import CurveFactors, fit_factors
 from curve_lab.trades import (
     Butterfly,
     dv01_neutral_weights,
@@ -80,12 +80,30 @@ class TestWeighting:
         with pytest.raises(ValueError, match="exactly two factors"):
             factor_neutral_weights(factors, ("DGS2", "DGS10"), "DGS5", neutral_to=(0, 1, 2))
 
-    def test_wings_that_load_alike_are_refused_rather_than_least_squared(self, synthetic):
-        # Two wings one tenor apart carry almost the same factor loadings, so
-        # the system is near-singular and the weights are not identified.
+    def test_the_same_tenor_twice_is_not_a_butterfly(self, synthetic):
         factors = fit_factors(synthetic)
-        with pytest.raises((ValueError, np.linalg.LinAlgError)):
+        with pytest.raises(ValueError, match="belly between its wings"):
             factor_neutral_weights(factors, ("DGS2", "DGS2"), "DGS5")
+
+    def test_wings_that_load_alike_are_refused_rather_than_least_squared(self, synthetic):
+        # Unreachable with the bundled curve once the ordering check is in
+        # front of it -- the smallest determinant over every valid fly there is
+        # 0.022 -- so the degenerate factor model is built explicitly. Without
+        # the guard this least-squares to weights nobody can interpret.
+        fitted = fit_factors(synthetic)
+        identical = fitted.loadings.copy()
+        identical[:, fitted.tenors.index("DGS10")] = identical[
+            :, fitted.tenors.index("DGS2")
+        ]
+        degenerate = CurveFactors(
+            maturities=fitted.maturities,
+            tenors=fitted.tenors,
+            loadings=identical,
+            explained=fitted.explained,
+            mean_change=fitted.mean_change,
+        )
+        with pytest.raises(ValueError, match="not identified"):
+            factor_neutral_weights(degenerate, ("DGS2", "DGS10"), "DGS5")
 
     def test_the_label_names_the_legs(self, synthetic):
         factors = fit_factors(synthetic)

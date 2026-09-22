@@ -91,6 +91,26 @@ def _blank(tenors: tuple[str, ...]) -> np.ndarray:
     return np.zeros(len(tenors), dtype=float)
 
 
+def _check_legs(tenors: tuple[str, ...], wings: tuple[str, str], belly: str) -> None:
+    """Every leg exists, and the belly is actually between the wings.
+
+    The ordering check lives here rather than in each caller because there are
+    four of them now -- the CLI, the browser port, the HTTP service and the
+    library -- and the first version enforced it in three. A "butterfly" with
+    its belly outside its wings is a different trade with a butterfly's name
+    on it, and it produced a confident-looking risk decomposition.
+    """
+    for tenor in (*wings, belly):
+        if tenor not in tenors:
+            raise KeyError(f"no tenor {tenor!r} in the fitted curve; have {list(tenors)}")
+    short, middle, long = (TENORS[wings[0]], TENORS[belly], TENORS[wings[1]])
+    if not short < middle < long:
+        raise ValueError(
+            f"a butterfly needs its belly between its wings; got "
+            f"{short:g}y / {middle:g}y / {long:g}y"
+        )
+
+
 def dv01_neutral_weights(
     tenors: tuple[str, ...], wings: tuple[str, str], belly: str
 ) -> Butterfly:
@@ -99,9 +119,7 @@ def dv01_neutral_weights(
     Weights are in DV01 units directly, so "half the belly's DV01 in each
     wing" is +0.5 / -1 / +0.5 and the net is zero by construction.
     """
-    for tenor in (*wings, belly):
-        if tenor not in tenors:
-            raise KeyError(f"no tenor {tenor!r} in the fitted curve; have {list(tenors)}")
+    _check_legs(tenors, wings, belly)
 
     weights = _blank(tenors)
     weights[tenors.index(belly)] = -1.0
@@ -131,9 +149,7 @@ def factor_neutral_weights(
     for it raises rather than silently least-squaring the answer.
     """
     tenors = factors.tenors
-    for tenor in (*wings, belly):
-        if tenor not in tenors:
-            raise KeyError(f"no tenor {tenor!r} in the fitted curve; have {list(tenors)}")
+    _check_legs(tenors, wings, belly)
     if len(neutral_to) != len(wings):
         raise ValueError(
             f"two wings can neutralise exactly two factors, not {len(neutral_to)}"
@@ -145,6 +161,11 @@ def factor_neutral_weights(
     # loadings[f, wing] @ x = loadings[f, belly] for each factor f being killed
     matrix = np.array([[factors.loadings[f, i] for i in wing_indices] for f in neutral_to])
     target = np.array([factors.loadings[f, belly_index] for f in neutral_to])
+    # Defence in depth rather than a live path: with the leg ordering already
+    # enforced, the smallest determinant across every valid fly on the bundled
+    # nine-tenor curve is 0.022, so this cannot fire there. It can for a caller
+    # passing a factor model of their own with two tenors that load alike, and
+    # least-squaring that silently would return weights nobody could interpret.
     if abs(np.linalg.det(matrix)) < 1e-12:
         raise ValueError(
             f"wings {wings} load almost identically on factors {neutral_to}; "

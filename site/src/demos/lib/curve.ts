@@ -298,11 +298,34 @@ function flyLabel(factors: Factors, wings: [string, string], belly: string, kind
   return `${legLabel(at(wings[0]))}${legLabel(at(belly))}${legLabel(at(wings[1]))} ${kind}`;
 }
 
+/**
+ * Every leg exists, and the belly is actually between the wings.
+ *
+ * Mirrors `_check_legs` in the Python engine. A "butterfly" with its belly
+ * outside its wings is a different trade wearing a butterfly's name, and it
+ * produces a confident-looking risk decomposition for a position nobody asked
+ * for.
+ */
+function checkLegs(factors: Factors, wings: [string, string], belly: string): void {
+  for (const tenor of [wings[0], belly, wings[1]]) {
+    if (!factors.tenors.includes(tenor)) {
+      throw new Error(`no tenor ${tenor} in the fitted curve`);
+    }
+  }
+  const at = (t: string) => factors.maturities[factors.tenors.indexOf(t)]!;
+  if (!(at(wings[0]) < at(belly) && at(belly) < at(wings[1]))) {
+    throw new Error(
+      `a butterfly needs its belly between its wings; got ${at(wings[0])}y / ${at(belly)}y / ${at(wings[1])}y`,
+    );
+  }
+}
+
 export function dv01NeutralWeights(
   factors: Factors,
   wings: [string, string],
   belly: string,
 ): Butterfly {
+  checkLegs(factors, wings, belly);
   const weights = new Array<number>(factors.tenors.length).fill(0);
   weights[factors.tenors.indexOf(belly)] = -1;
   for (const wing of wings) weights[factors.tenors.indexOf(wing)] = 0.5;
@@ -321,6 +344,7 @@ export function factorNeutralWeights(
   wings: [string, string],
   belly: string,
 ): Butterfly {
+  checkLegs(factors, wings, belly);
   const bellyIndex = factors.tenors.indexOf(belly);
   const wingIndices = wings.map((w) => factors.tenors.indexOf(w));
 
