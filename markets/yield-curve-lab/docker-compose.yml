@@ -1,0 +1,35 @@
+services:
+  engine:
+    build:
+      context: .
+      target: engine
+    # Not published: the BFF is the only thing that should talk to it, and an
+    # engine on a public port is an unauthenticated way to spend CPU.
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=4).status == 200 else 1)
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "8080:8080"
+    environment:
+      CURVE_ENGINE_URL: http://engine:8000
+      CURVE_CACHE_ENTRIES: ${CURVE_CACHE_ENTRIES:-256}
+      CURVE_CACHE_TTL_MINUTES: ${CURVE_CACHE_TTL_MINUTES:-60}
+    depends_on:
+      engine:
+        condition: service_healthy

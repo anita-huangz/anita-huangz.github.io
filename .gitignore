@@ -30,3 +30,6 @@ htmlcov/
 # checked against what vitest actually ran.
 vitest.json
 htmlcov/
+
+# vitest --reporter=json output, written by the curve-lab API check in CI.
+api-tests.json

@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**2,829 tests** — 2,094 in Python, and 735 in the browser, most of them
+**2,892 tests** — 2,120 in Python, 738 in the browser, and 34 against the API, most of them
 cross-checking the site's TypeScript ports against fixtures the Python
 generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
@@ -327,7 +327,7 @@ Gone: `adjust_factor_weights_based_on_regression`, which multiplied a loading
 by 1.5 above 0.5 and 1.2 above 0.2 — six unjustified constants.
 **Python · NumPy · pandas · SciPy · scikit-learn (tests only)**
 
-### 4. ✅ [Yield Curve Lab](markets/yield-curve-lab) · 183 tests
+### 4. ✅ [Yield Curve Lab](markets/yield-curve-lab) · 209 tests
 
 Nine Treasury tenors, 1981 to 2026. What the curve actually does, what a curve
 trade is really exposed to, and whether any of it can be forecast.

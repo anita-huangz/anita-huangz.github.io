@@ -114,6 +114,40 @@ jobs:
           count=$(python3 -c "import json;print(json.load(open('vitest.json'))['numTotalTests'])")
           python3 scripts/check_test_counts.py --browser "$count"
 
+  curve-api:
+    name: curve-lab API + client
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: markets/yield-curve-lab
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: BFF
+        # Its tests fake the engine, so none of this needs Python running.
+        run: |
+          cd api
+          npm install
+          npx tsc -b --noEmit
+          npm test -- --reporter=json --outputFile=../../../api-tests.json
+
+      - name: Documented API test count matches the suite
+        working-directory: .
+        run: |
+          count=$(python3 -c "import json;print(json.load(open('api-tests.json'))['numTotalTests'])")
+          python3 scripts/check_test_counts.py --api "$count"
+
+      - name: Client
+        run: |
+          cd web
+          npm install
+          npx tsc -b --noEmit
+          npm run build
+
   web:
     name: web UI
     runs-on: ubuntu-latest
@@ -145,3 +179,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build the AI platform image
         run: docker build -t filing-intel:ci llm-platform/sec-filing-intelligence
+
+      - name: Build the curve-lab images
+        # Two targets from one Dockerfile: the Python engine and the Node BFF
+        # that serves the built client in front of it.
+        run: |
+          docker build --target engine -t curve-lab-engine:ci markets/yield-curve-lab
+          docker build --target api -t curve-lab-api:ci markets/yield-curve-lab
