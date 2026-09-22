@@ -100,7 +100,12 @@ function Configured({
     () => (window.yields.length > 300 ? fitFactors(window) : allFactors),
     [window, allFactors],
   );
-  const factors = lookAhead ? allFactors : windowFactors;
+  // The risk decomposition is a description of all forty-five years, and it is
+  // the number quoted in the write-up directly above this demo, so it always
+  // uses the full history. Only the *backtest* cares which curve taught the
+  // weights, because only it is claiming a trader could have set them.
+  const factors = allFactors;
+  const tradingFactors = lookAhead ? allFactors : windowFactors;
 
   const [forecastFactor, setForecastFactor] = useState("curvature");
   const [horizon, setHorizon] = useState(5);
@@ -108,25 +113,32 @@ function Configured({
   const order = (t: string) => factors.maturities[factors.tenors.indexOf(t)];
   const legsValid = order(shortWing) < order(belly) && order(belly) < order(longWing);
 
-  const fly: Butterfly | null = useMemo(() => {
+  const build = (basis: typeof factors): Butterfly | null => {
     if (!legsValid) return null;
     const wings: [string, string] = [shortWing, longWing];
     try {
       return weighting === "dv01"
-        ? dv01NeutralWeights(factors, wings, belly)
-        : factorNeutralWeights(factors, wings, belly);
+        ? dv01NeutralWeights(basis, wings, belly)
+        : factorNeutralWeights(basis, wings, belly);
     } catch {
       return null;
     }
-  }, [factors, shortWing, longWing, belly, weighting, legsValid]);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fly = useMemo(() => build(factors), [factors, shortWing, longWing, belly, weighting, legsValid]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tradedFly = useMemo(
+    () => build(tradingFactors),
+    [tradingFactors, shortWing, longWing, belly, weighting, legsValid],
+  );
 
   const shares = useMemo(() => (fly ? varianceShare(fly, factors) : null), [fly, factors]);
 
   const backtest = useMemo(() => {
-    if (!fly || window.yields.length < 30) return null;
-    const result = runBacktest(window, fly, { rebalanceDays, costBp, rollHorizonDays: 63 });
+    if (!tradedFly || window.yields.length < 30) return null;
+    const result = runBacktest(window, tradedFly, { rebalanceDays, costBp, rollHorizonDays: 63 });
     return { result, performance: summarise(result) };
-  }, [window, fly, rebalanceDays, costBp]);
+  }, [window, tradedFly, rebalanceDays, costBp]);
 
   const run = forecasts.runs.find(
     (r) => r.factor === forecastFactor && r.horizonDays === horizon,
@@ -241,20 +253,28 @@ function Configured({
                 onChange={(e) => setCostBp(Number(e.target.value))}
               />
             </label>
-            <label className="control">
+            <label className="control" title={
+              weighting === "dv01"
+                ? "A DV01-neutral fly is 0.5 / -1 / 0.5 whatever the factor model says, so this changes nothing. Switch the weighting to factor-neutral."
+                : "Refit the factor model on the whole history, including everything after the start date."
+            }>
               <input
                 type="checkbox"
                 checked={lookAhead}
+                disabled={weighting === "dv01"}
                 onChange={(e) => setLookAhead(e.target.checked)}
               />
-              <span className="control-label">Fit factors on all 45 years</span>
+              <span className="control-label">
+                Fit factors on all 45 years
+                {weighting === "dv01" && " (factor-neutral only)"}
+              </span>
             </label>
           </div>
           {backtest && (
             <BacktestPanel
               {...backtest}
               label={fly?.label ?? ""}
-              lookAhead={lookAhead}
+              lookAhead={lookAhead && weighting === "factor"}
               startYear={startYear}
             />
           )}
