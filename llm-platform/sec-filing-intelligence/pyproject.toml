@@ -17,6 +17,11 @@ dependencies = [
     "httpx>=0.27",
     "mcp>=1.2",
     "langgraph>=1.0",
+    # Retrieval over filing sections: numpy for the vectors, scikit-learn for
+    # the TF-IDF and the SVD behind them. Core rather than an extra, because
+    # `fetch_filing_section` takes the retrieval path whenever a query is given.
+    "numpy>=1.26",
+    "scikit-learn>=1.4",
 ]
 
 [project.optional-dependencies]
