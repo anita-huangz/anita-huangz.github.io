@@ -298,6 +298,90 @@ deploy.
 
 ---
 
+## Asynchronous research
+
+A research call takes about nine seconds against a live model. `/v1/research`
+holds the connection for all of it, which couples the caller's timeout to the
+model's latency, loses the work if they disconnect, and leaves no way to shed
+load except refusing outright.
+
+```
+POST /v1/research/jobs      202, a job id, in about a millisecond
+GET  /v1/research/jobs/{id} queued | running | succeeded | failed, plus the result
+```
+
+```bash
+curl -si -X POST localhost:8000/v1/research/jobs \
+  -H 'content-type: application/json' -H 'Idempotency-Key: 9f2c' \
+  -d '{"ticker":"AAPL","question":"What supply chain risks does Apple disclose?"}'
+# HTTP/1.1 202 Accepted
+# Location: /v1/research/jobs/fa991657f4b24dcfb4fb910612ae41e9
+```
+
+### Idempotency
+
+`Idempotency-Key` makes a retried submission safe: the same key returns the same
+job rather than running nine seconds of model time twice.
+
+The same key with a **different body** is a 409. Returning the first request's
+result would be answering a question nobody asked, and treating it as new work
+would defeat the point of the key — so the only honest answer is to refuse. The
+payload is fingerprinted to tell the two cases apart.
+
+On Redis the guarantee is a `SET NX`: the first submission to land claims the
+key, and concurrent duplicates read back the winner rather than each creating a
+job.
+
+### Delivery, and why a claim is a lease
+
+At-least-once, not at-most-once. A worker that dies mid-job has to leave the
+work recoverable, so claiming sets a deadline rather than removing the job, and
+a reaper puts expired leases back. The cost is that a stalled worker can finish
+a job that has already been retried; the alternative cost is losing work the
+caller is waiting on, which is worse. Idempotency at the API layer is what keeps
+the duplicate from reaching the caller.
+
+The claim itself is a single `LMOVE`, which Redis executes atomically, so two
+workers cannot take the same job. No Lua, and no broker: this needs one queue
+and one worker type, and Celery is a large dependency and an abstraction over
+brokers for a problem that is a Redis list.
+
+### Retries
+
+Not everything is worth retrying. A 503 from EDGAR will probably succeed in four
+seconds; a malformed ticker will fail identically three times and delay the
+caller's error by the whole backoff. The classification runs against the error
+taxonomy in `errors.py` rather than against exception strings:
+
+| | retried |
+|---|---|
+| `UpstreamDataError`, timeouts, connection errors | yes |
+| `ConfigError`, `ProviderRefusal`, `ToolInputInvalid`, `ValueError` | no |
+| anything unrecognised | yes — one wasted attempt beats a lost job |
+
+Backoff is exponential with **full jitter**. Without it, every job that failed
+during a ten-second outage retries at the same instant afterwards, which is how
+a recovering dependency gets knocked over by its own clients.
+
+### Degradation, and scaling
+
+No Redis configured means an in-process store with the same semantics, matching
+how the cache already behaves — a single-worker deployment is a real deployment,
+not a test double. The API runs a worker in-process by default, so one container
+is a complete system.
+
+When that stops being enough, research is network- and model-bound while the
+HTTP surface is idle, so workers scale on their own axis:
+
+```bash
+docker compose up --scale worker=4      # same image, same queue, worker only
+python -m filing_intel.jobs --concurrency 2
+```
+
+The standalone worker refuses to start without `FILING_INTEL_REDIS_URL`. An
+in-process queue is invisible to another process, so a worker pointed at one
+would sit idle forever while looking perfectly healthy.
+
 ## Retrieval: the section is four times longer than the tool showed
 
 `fetch_filing_section` truncated to `max_chars` and returned the *front* of the
@@ -383,7 +467,7 @@ goes from 123,360 characters to 115,143, all of which is risk disclosure.
 ## Testing
 
 ```bash
-make test     # 322 tests, no network, no API key
+make test     # 410 tests, no network, no API key
 ```
 
 The suite covers cost arithmetic, cache and TTL semantics, telemetry
@@ -429,6 +513,7 @@ src/filing_intel/
   cache/            Redis with an in-process fallback; session state
   data/             SEC EDGAR and price clients
   retrieval/        chunking, BM25, LSA, and the benchmark that ranks them
+  jobs/             the queue, the worker, retries, leases, idempotency
   tools/            tool definitions and the registry that enforces them
   agents/           the LangGraph workflow and its prompts
   api/              FastAPI surface
@@ -436,12 +521,25 @@ src/filing_intel/
   providers/demo.py deterministic stub model, for running without a key
 evals/              dataset, grading, harness
 web/                React + Vite UI (components, SSE client, styles)
-tests/              322 tests
+tests/              410 tests
 ```
 
 ---
 
 ## Notes and limits
+
+- **The queue has no dead-letter destination.** An exhausted job is marked
+  `failed` with its reason and left in the store; nothing moves it somewhere an
+  operator would find it, and nothing expires it. At this size that is a
+  deliberate omission rather than an oversight, but it is an omission.
+- **Job records never expire.** In Redis they accumulate in one hash. A TTL on
+  terminal jobs is the obvious next thing and is not there.
+- **There is no authentication on any endpoint.** The rate limiter is per client
+  address and that is the whole of the access control. Submitting a job costs
+  model time, so a public deployment wants a key before it wants anything else
+  in this list.
+- **Cancellation is modelled and not implemented.** `JobState.CANCELLED` exists
+  because the state machine needs it; no route sets it.
 
 - **Retrieval is lexical and latent-semantic, not neural.** See the section
   above: no pretrained embedding is downloaded, so "semantic" here means an SVD

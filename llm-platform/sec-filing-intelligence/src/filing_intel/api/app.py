@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -23,6 +23,14 @@ from pydantic import ValidationError
 from ..config import Settings, get_settings
 from ..contracts import ResearchRequest, ResearchResponse, Strict
 from ..errors import ConfigError, FilingIntelError, UpstreamDataError
+from ..jobs import (
+    IdempotencyConflict,
+    Job,
+    JobStore,
+    Worker,
+    build_job_store,
+    fingerprint,
+)
 from ..runtime import FilingIntelRuntime
 from ..telemetry import TelemetrySummary
 from .limits import SlidingWindowLimiter, enforce
@@ -43,13 +51,60 @@ class SessionResponse(Strict):
     estimated_cost_usd: float
 
 
+class JobResponse(Strict):
+    """A submitted job. `result` is populated once the state is `succeeded`."""
+
+    id: str
+    state: str
+    attempts: int
+    max_attempts: int
+    created_at: float
+    updated_at: float
+    result: dict[str, Any] | None = None
+    error: str | None = None
+    error_kind: str | None = None
+
+
+def _job_response(job: Job) -> JobResponse:
+    return JobResponse(
+        id=job.id,
+        state=str(job.state),
+        attempts=job.attempts,
+        max_attempts=job.max_attempts,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        result=job.result,
+        error=job.error,
+        error_kind=job.error_kind,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     runtime = FilingIntelRuntime.build(app.state.settings)
     app.state.runtime = runtime
+
+    store = build_job_store(app.state.settings.redis_url)
+    app.state.job_store = store
+
+    async def handle(payload: dict[str, Any]) -> dict[str, Any]:
+        # Resolved per call rather than captured, so the worker always uses the
+        # runtime currently installed on the app. That is what lets a test swap
+        # in a scripted provider and have the queue exercise the real path.
+        current: FilingIntelRuntime = app.state.runtime
+        response = await current.research(ResearchRequest.model_validate(payload))
+        return response.model_dump(mode="json")
+
+    worker = Worker(store, handle)
+    app.state.worker = worker
+    # In-process rather than a separate container: one deployable is the right
+    # default at this size, and `python -m filing_intel.jobs` runs the same
+    # worker standalone against the same Redis when that stops being true.
+    worker.start()
     try:
         yield
     finally:
+        await worker.stop()
         await runtime.aclose()
 
 
@@ -60,6 +115,13 @@ def get_runtime(request: Request) -> FilingIntelRuntime:
 #: FastAPI's modern dependency form. Using Annotated rather than a `Depends`
 #: default keeps the signatures honest and avoids a call in a default arg.
 Runtime = Annotated[FilingIntelRuntime, Depends(get_runtime)]
+
+
+def get_job_store(request: Request) -> JobStore:
+    return request.app.state.job_store
+
+
+Jobs = Annotated[JobStore, Depends(get_job_store)]
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -121,6 +183,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> ResearchResponse:
         enforce(limiter, request)
         return await runtime.research(body)
+
+    @app.post("/v1/research/jobs", response_model=JobResponse, status_code=202)
+    async def submit_research(
+        body: ResearchRequest,
+        request: Request,
+        response: Response,
+        jobs: Jobs,
+        idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+    ) -> JobResponse:
+        """Queue a research run and return immediately.
+
+        A research call takes about nine seconds against a live model. This
+        hands back a job id in milliseconds and lets the caller poll, which
+        decouples their timeout from the model's latency and survives them
+        disconnecting.
+
+        `Idempotency-Key` makes a retried submission safe: the same key returns
+        the same job rather than running the work twice. The same key with a
+        *different* body is a client bug and gets a 409 -- answering it with the
+        first request's result would be answering a question nobody asked.
+        """
+        enforce(limiter, request)
+        payload = body.model_dump(mode="json")
+        job = Job.new(
+            payload,
+            idempotency_key=idempotency_key,
+            request_hash=fingerprint(payload),
+        )
+        try:
+            stored = await jobs.submit(job)
+        except IdempotencyConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        response.headers["Location"] = f"/v1/research/jobs/{stored.id}"
+        return _job_response(stored)
+
+    @app.get("/v1/research/jobs/{job_id}", response_model=JobResponse)
+    async def get_research_job(job_id: str, jobs: Jobs) -> JobResponse:
+        job = await jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"no job {job_id}")
+        return _job_response(job)
 
     @app.get("/v1/research/stream")
     async def research_stream(request: Request, runtime: Runtime, ticker: str,

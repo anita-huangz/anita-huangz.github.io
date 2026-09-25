@@ -26,7 +26,7 @@ export const PROJECTS: Project[] = [
       "TypeScript"
     ],
     "path": "llm-platform/sec-filing-intelligence",
-    "tests": 322,
+    "tests": 410,
     "highlights": [
       "Multi-provider model access: Anthropic, AWS Bedrock, and a deterministic replay provider behind one interface, switched by config",
       "A verifier node audits every citation against gathered evidence and can mark the answer unverified",
@@ -44,7 +44,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A ticker and a plain-English question \u2014 e.g. AAPL, \"What supply chain risks does Apple disclose?\"",
       "output": "A cited answer plus structured findings, each with an accession number and filing date, a verified/unverified verdict, and the run's token, cost, and latency figures.",
-      "scale": "322 tests, all offline. Four tools, three model providers, one MCP server."
+      "scale": "410 tests, all offline. Four tools, three model providers, one MCP server."
     },
     "sources": [
       {

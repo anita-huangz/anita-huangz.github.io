@@ -52,8 +52,10 @@ def client(settings, cache, telemetry):
     )
     # Override the dependency rather than the lifespan so no real runtime is built.
     app.dependency_overrides[get_runtime] = lambda: runtime
-    app.state.runtime = runtime
     with TestClient(app) as c:
+        # After the lifespan, so the background worker picks up the scripted
+        # runtime rather than the one the lifespan built.
+        app.state.runtime = runtime
         c.runtime = runtime
         yield c
 
@@ -365,3 +367,77 @@ def test_forwarded_header_identifies_the_original_client():
     request = Mock()
     request.headers = {"x-forwarded-for": "203.0.113.9, 10.0.0.1"}
     assert client_key(request) == "203.0.113.9"
+
+
+class TestResearchJobs:
+    """The async submission path.
+
+    A synchronous research call holds the connection for about nine seconds
+    against a live model. These check the submission returns immediately, the
+    work still happens, and a retried submission does not run it twice.
+    """
+
+    def test_submission_returns_immediately_with_a_location(self, client):
+        response = client.post(
+            "/v1/research/jobs", json={"ticker": "AAPL", "question": "What risks?"}
+        )
+        assert response.status_code == 202
+        body = response.json()
+        assert body["state"] == "queued"
+        assert response.headers["Location"] == f"/v1/research/jobs/{body['id']}"
+
+    def test_the_job_runs_and_the_result_can_be_fetched(self, client):
+        submitted = client.post(
+            "/v1/research/jobs", json={"ticker": "AAPL", "question": "What risks?"}
+        ).json()
+        final = _await_job(client, submitted["id"])
+        assert final["state"] == "succeeded", final
+        assert final["result"]["answer"]
+
+    def test_the_same_key_and_body_does_not_run_twice(self, client):
+        body = {"ticker": "AAPL", "question": "What risks?"}
+        headers = {"Idempotency-Key": "retry-me"}
+        first = client.post("/v1/research/jobs", json=body, headers=headers).json()
+        second = client.post("/v1/research/jobs", json=body, headers=headers).json()
+        assert first["id"] == second["id"]
+
+    def test_the_same_key_with_a_different_body_is_a_conflict(self, client):
+        headers = {"Idempotency-Key": "reused"}
+        client.post(
+            "/v1/research/jobs",
+            json={"ticker": "AAPL", "question": "What supply chain risks?"},
+            headers=headers,
+        )
+        clash = client.post(
+            "/v1/research/jobs",
+            json={"ticker": "MSFT", "question": "What cloud risks?"},
+            headers=headers,
+        )
+        # Answering with the first request's result would answer a question
+        # nobody asked.
+        assert clash.status_code == 409
+        assert "different request body" in clash.json()["detail"]
+
+    def test_without_a_key_two_submissions_are_two_jobs(self, client):
+        body = {"ticker": "AAPL", "question": "What risks?"}
+        first = client.post("/v1/research/jobs", json=body).json()
+        second = client.post("/v1/research/jobs", json=body).json()
+        assert first["id"] != second["id"]
+
+    def test_an_unknown_job_is_a_404(self, client):
+        assert client.get("/v1/research/jobs/does-not-exist").status_code == 404
+
+    def test_a_malformed_submission_never_reaches_the_queue(self, client):
+        assert client.post("/v1/research/jobs", json={"question": "no ticker"}).status_code == 422
+
+
+def _await_job(client, job_id: str, timeout: float = 30.0) -> dict:
+    import time
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        body = client.get(f"/v1/research/jobs/{job_id}").json()
+        if body["state"] in {"succeeded", "failed"}:
+            return body
+        time.sleep(0.05)
+    raise AssertionError(f"job {job_id} did not finish within {timeout}s")

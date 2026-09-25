@@ -25,7 +25,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-cov>=5", "pytest-asyncio>=0.24", "ruff>=0.7"]
+dev = ["pytest>=8", "pytest-cov>=5", "pytest-asyncio>=0.24", "ruff>=0.7",
+    # Exercises the Redis job store without a server, so the queue's
+    # production path is tested rather than only its in-process fallback.
+    "fakeredis>=2.23",
+]
 
 [project.scripts]
 filing-intel-mcp = "filing_intel.mcp_server:main"
