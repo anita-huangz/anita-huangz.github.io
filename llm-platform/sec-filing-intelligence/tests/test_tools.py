@@ -6,6 +6,7 @@ from datetime import date
 
 import pytest
 
+from conftest import APPL_FILING
 from filing_intel.contracts import Capability
 from filing_intel.errors import UpstreamDataError
 
@@ -168,3 +169,99 @@ async def test_duplicate_registration_is_rejected(registry):
                 handler=noop,
             )
         )
+
+
+class TestSectionRetrieval:
+    """The `query` path through `fetch_filing_section`.
+
+    Without a query the tool truncates to `max_chars` and the model reads the
+    front of the section. With one it reads the passages that answer the
+    question, drawn from the whole of it. On the three real filings in the
+    fixture the front is 17-29% of the text, so this is not a marginal
+    improvement to ranking -- it is the difference between the answer being
+    reachable and not.
+    """
+
+    @staticmethod
+    def long_section() -> str:
+        """A section where the answer sits deliberately past the truncation point."""
+        filler = (
+            "The Company faces competition in every market in which it operates. "
+            "Competitors may introduce products at lower prices. "
+        )
+        needle = (
+            "The Company's board may reduce or suspend the dividend at any time, "
+            "and any such decision would be made in light of capital requirements. "
+        )
+        return filler * 400 + needle + filler * 100
+
+    @pytest.fixture
+    def registry(self, edgar, prices, cache, telemetry):
+        from filing_intel.contracts import SectionText
+        from filing_intel.tools import build_registry
+
+        body = self.long_section()
+
+        async def fetch_section(ticker, accession, section, max_chars=20000):
+            return SectionText(
+                accession=accession,
+                section=section,
+                text=body[:max_chars],
+                char_count=len(body),
+                truncated=len(body) > max_chars,
+            )
+
+        edgar.fetch_section = fetch_section
+        return build_registry(edgar, prices, cache, telemetry)
+
+    @staticmethod
+    def args(**extra):
+        return {
+            "ticker": "AAPL",
+            "accession": APPL_FILING.accession,
+            "section": "risk_factors",
+            **extra,
+        }
+
+    async def test_without_a_query_the_answer_is_out_of_reach(self, registry):
+        result = await execute(registry, "fetch_filing_section", self.args())
+        assert result.ok
+        assert "dividend" not in result.data["text"].lower()
+        assert result.data["truncated"] is True
+        assert result.data["passages"] == []
+        assert result.data["retrieval"] is None
+
+    async def test_with_a_query_it_is_found(self, registry):
+        result = await execute(
+            registry,
+            "fetch_filing_section",
+            self.args(query="Could the company stop paying its dividend?"),
+        )
+        assert result.ok
+        assert "dividend" in result.data["text"].lower()
+        assert result.data["retrieval"] == "lsa"
+
+    async def test_the_passages_carry_offsets_a_citation_can_point_at(self, registry):
+        result = await execute(
+            registry,
+            "fetch_filing_section",
+            self.args(query="dividend suspension", passages=3),
+        )
+        passages = result.data["passages"]
+        assert 0 < len(passages) <= 3
+        whole = self.long_section()
+        for passage in passages:
+            assert passage["end"] > passage["start"]
+            assert passage["text"] in whole
+
+    async def test_char_count_still_describes_the_whole_section(self, registry):
+        result = await execute(registry, "fetch_filing_section", self.args(query="dividend"))
+        # Not the length of what came back: the model should be able to tell it
+        # is reading a selection from something much larger.
+        assert result.data["char_count"] > len(result.data["text"]) * 5
+
+    async def test_the_number_of_passages_is_bounded_by_the_schema(self, registry):
+        result = await execute(
+            registry, "fetch_filing_section", self.args(query="dividend", passages=99)
+        )
+        assert not result.ok

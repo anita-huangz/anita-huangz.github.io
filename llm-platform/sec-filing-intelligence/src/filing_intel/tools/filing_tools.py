@@ -8,11 +8,24 @@ from ..contracts import (
     CompanyFactsArgs,
     FetchSectionArgs,
     PriceReactionArgs,
+    RetrievedPassage,
     SearchFilingsArgs,
+    SectionText,
 )
 from ..data import EdgarClient, PriceClient
+from ..retrieval import build_retriever
 from ..telemetry import TelemetryRecorder
 from .registry import Tool, ToolRegistry
+
+#: How much of a section to pull when a query is supplied. The contract caps
+#: `max_chars` at 200,000 and the longest section in the test corpus is 115,143,
+#: so this is "all of it" without inventing a second limit.
+MAX_SECTION_CHARS = 200_000
+
+#: Latent semantic analysis. On the twelve-query benchmark it recalls 10/12
+#: against BM25's 8/12, winning the two cases whose wording shares nothing with
+#: the passage. See `retrieval/benchmark.py`.
+RETRIEVAL_STRATEGY = "lsa"
 
 
 def build_registry(
@@ -30,11 +43,41 @@ def build_registry(
         )
 
     async def fetch_filing_section(args: FetchSectionArgs):
-        return await edgar.fetch_section(
+        if args.query is None:
+            return await edgar.fetch_section(
+                ticker=args.ticker,
+                accession=args.accession,
+                section=args.section,
+                max_chars=args.max_chars,
+            )
+
+        # With a query, fetch the section whole and select from it. Truncating
+        # first and then retrieving would search the same fifth of the text the
+        # unqualified call already returns, which is the problem, not the fix.
+        whole = await edgar.fetch_section(
             ticker=args.ticker,
             accession=args.accession,
             section=args.section,
-            max_chars=args.max_chars,
+            max_chars=MAX_SECTION_CHARS,
+        )
+        retriever = build_retriever(RETRIEVAL_STRATEGY, whole.text)
+        hits = retriever.search(args.query, args.passages)
+        return SectionText(
+            accession=whole.accession,
+            section=whole.section,
+            # The joined passages are what the model reads; `passages` keeps
+            # them separable with their offsets so a citation can point at a
+            # position rather than at "somewhere in what we sent".
+            text="\n\n[…]\n\n".join(h.text for h in hits),
+            char_count=whole.char_count,
+            truncated=whole.truncated,
+            passages=[
+                RetrievedPassage(
+                    text=h.text, start=h.passage.start, end=h.passage.end, score=h.score
+                )
+                for h in hits
+            ],
+            retrieval=retriever.name,
         )
 
     async def company_financials(args: CompanyFactsArgs):
@@ -67,8 +110,11 @@ def build_registry(
             name="fetch_filing_section",
             description=(
                 "Fetch the text of one section of a filing (business, risk_factors, "
-                "mda, or financial_statements) given its accession number. Text is "
-                "truncated to max_chars; check the `truncated` flag."
+                "mda, or financial_statements) given its accession number. Without "
+                "a query the text is truncated to max_chars -- for a risk-factors "
+                "section that is roughly the first fifth -- so pass `query` "
+                "describing what you need and the most relevant passages from the "
+                "whole section are returned instead."
             ),
             args_model=FetchSectionArgs,
             capability=Capability.READ_FILINGS,

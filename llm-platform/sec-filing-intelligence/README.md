@@ -298,10 +298,92 @@ deploy.
 
 ---
 
+## Retrieval: the section is four times longer than the tool showed
+
+`fetch_filing_section` truncated to `max_chars` and returned the *front* of the
+section. Measured on three real 10-Ks:
+
+| | risk factors | the tool showed |
+|---|---|---|
+| Apple FY2023 | 67,995 chars | 29% |
+| Microsoft FY2026 | 81,368 chars | 25% |
+| NVIDIA FY2026 | 115,143 chars | **17%** |
+
+Four-fifths of NVIDIA's disclosed risk was unreachable, and which fifth
+survived was decided by position rather than by relevance.
+
+Pass a `query` and the tool now pulls the section whole, splits it into
+sentence-aligned passages carrying their character offsets, and returns the
+ones that answer the question.
+
+### Does it work? Twelve queries, three filings
+
+Each case names a query and an **anchor** -- a phrase in the passage that
+answers it. A retrieval is correct when a returned passage contains the anchor.
+That is objective and recheckable: the anchors are in the committed fixture at
+known offsets. Every target sits past character 20,000, which is the half of
+the question truncation cannot answer at any quality.
+
+```
+truncation  recall@5   0.0%  (0/12)   mean rank of the hit —
+bm25        recall@5  66.7%  (8/12)   mean rank of the hit 1.1
+lsa         recall@5  83.3% (10/12)   mean rank of the hit 2.1
+hybrid      recall@5  66.7%  (8/12)   mean rank of the hit 1.1
+```
+
+**Truncation scores zero**, by construction, and that is the finding: not that
+it ranks badly, but that the text is not there to rank.
+
+**The semantic retriever wins the two cases with no shared vocabulary** —
+"returning cash to shareholders" finding the dividend passage, "concentrated in
+particular places" finding the one about California and Asia. That is precisely
+what it is supposed to buy, and the per-case table shows it is the only thing it
+buys: everywhere the wording overlaps, BM25 matches it and ranks the hit higher
+(1.1 against 2.1).
+
+**Hybrid added nothing.** On the case LSA gets and BM25 misses, reciprocal rank
+fusion puts the target at rank 6 — one place outside the cut, tied on score with
+the passage at 5 and losing the tie-break. That is a near miss rather than a
+structural failure. Lowering the fusion constant would fix this case; tuning it
+on twelve cases would be fitting noise, so it is left alone and reported.
+
+### On the word "semantic"
+
+`SemanticRetriever` is latent semantic analysis: TF-IDF over unigrams and
+bigrams, reduced by truncated SVD, compared by cosine. **It is a vector-space
+embedding, not a neural one.** A sentence transformer would very likely retrieve
+better; it also costs a 90 MB model download and a torch dependency, against a
+standard that everything here runs offline in CI with no downloads and no keys.
+The `Embedder` protocol is the seam for anyone willing to pay that.
+
+It is also fitted on the section's own passages — a few hundred documents is a
+small corpus for an SVD. It buys synonym tolerance *within the filing's*
+vocabulary and nothing outside it.
+
+```bash
+python -m filing_intel.retrieval.benchmark   # reproduces the table above
+```
+
+### A bug this found
+
+Building the fixture surfaced one. `extract_section` took the **last** match of
+the Item heading, on the reasoning that the first is the table of contents.
+NVIDIA's 10-K cross-references its own Items in prose — "see Item 1A. Risk
+factors in this annual report" — five times. The last match landed on one of
+those, found no closing boundary after it, and returned **123,360 characters of
+financial-statement notes labelled as risk factors**: marketable securities, an
+employee stock purchase plan, deferred tax attributes. The model would have
+cited them as disclosed risks.
+
+Headings sit at the start of a line and prose cross-references do not, so
+line-start matches are now preferred, and a candidate must have a closing
+boundary and clear a minimum length. Apple and Microsoft are unchanged; NVIDIA
+goes from 123,360 characters to 115,143, all of which is risk disclosure.
+
 ## Testing
 
 ```bash
-make test     # 268 tests, no network, no API key
+make test     # 322 tests, no network, no API key
 ```
 
 The suite covers cost arithmetic, cache and TTL semantics, telemetry
@@ -346,6 +428,7 @@ src/filing_intel/
   telemetry/        typed events, per-model pricing, aggregation
   cache/            Redis with an in-process fallback; session state
   data/             SEC EDGAR and price clients
+  retrieval/        chunking, BM25, LSA, and the benchmark that ranks them
   tools/            tool definitions and the registry that enforces them
   agents/           the LangGraph workflow and its prompts
   api/              FastAPI surface
@@ -353,12 +436,24 @@ src/filing_intel/
   providers/demo.py deterministic stub model, for running without a key
 evals/              dataset, grading, harness
 web/                React + Vite UI (components, SSE client, styles)
-tests/              268 tests
+tests/              322 tests
 ```
 
 ---
 
 ## Notes and limits
+
+- **Retrieval is lexical and latent-semantic, not neural.** See the section
+  above: no pretrained embedding is downloaded, so "semantic" here means an SVD
+  over the filing's own TF-IDF. The measured win over BM25 is two cases in
+  twelve, which is one paraphrase away from a tie.
+- **The retrieval benchmark is twelve queries over three filings.** Enough to
+  show truncation cannot answer them and that retrieval can; not enough to rank
+  BM25 against LSA with any confidence, and the README does not.
+- **A passage containing the anchor is not the same as a good answer.** The
+  benchmark measures whether the right text was put in front of the model, not
+  whether the model then used it well. That second question needs a labelled
+  answer set this does not have.
 
 - Section extraction is regex over tag-stripped HTML. It handles the common
   10-K/10-Q layouts and the table-of-contents repetition, but EDGAR filings are
