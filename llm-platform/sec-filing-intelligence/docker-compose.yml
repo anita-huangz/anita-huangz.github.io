@@ -27,3 +27,22 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+
+  worker:
+    build: .
+    # The same image and the same queue, running only the worker. Research is
+    # network- and model-bound while the HTTP surface is idle, so this is the
+    # axis worth scaling: `docker compose up --scale worker=4`. The API keeps
+    # its own in-process worker, so a deployment without this service still
+    # drains its queue.
+    command: ["python", "-m", "filing_intel.jobs", "--concurrency", "2"]
+    environment:
+      FILING_INTEL_PROVIDER: ${FILING_INTEL_PROVIDER:-anthropic}
+      FILING_INTEL_MODEL: ${FILING_INTEL_MODEL:-claude-opus-5}
+      FILING_INTEL_REDIS_URL: redis://redis:6379/0
+      FILING_INTEL_SEC_USER_AGENT: ${FILING_INTEL_SEC_USER_AGENT:?set a contact email, EDGAR returns 403 without one}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    depends_on:
+      redis:
+        condition: service_healthy
