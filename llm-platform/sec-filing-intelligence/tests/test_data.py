@@ -524,3 +524,78 @@ async def test_a_slow_caller_is_never_made_to_wait():
     start = time.monotonic()
     await limiter.wait()
     assert time.monotonic() - start < 0.02
+
+
+class TestSectionBoundariesOnRealFilings:
+    """The Item-1A extractor, against three real 10-Ks.
+
+    These are committed as a fixture because the failure this guards against
+    is invisible on a synthetic filing: it needs a document that cross-
+    references its own Items in prose, which every large filer does and no
+    hand-written test case does.
+    """
+
+    @staticmethod
+    def sections() -> dict:
+        import json
+        from pathlib import Path
+
+        path = Path(__file__).parent / "fixtures" / "sections" / "risk_factors.json"
+        return json.loads(path.read_text())
+
+    def test_every_section_starts_at_the_real_heading(self):
+        for ticker, filing in self.sections().items():
+            assert filing["text"].lower().startswith("item 1a"), ticker
+
+    def test_a_cross_reference_is_not_mistaken_for_the_heading(self):
+        # NVIDIA's 10-K says "see Item 1A. Risk factors in this annual report"
+        # five times, mid sentence. Taking the last match landed on one of
+        # them, found no closing boundary, and returned 123,360 characters of
+        # financial-statement notes labelled as risk factors.
+        nvda = self.sections()["NVDA"]["text"]
+        assert 100_000 < len(nvda) < 120_000
+        assert "Employee Stock Purchase Plan" not in nvda
+        assert "marketable securities consist of highly liquid" not in nvda.lower()
+
+    def test_the_sections_are_risk_prose_throughout(self):
+        for ticker, filing in self.sections().items():
+            text = filing["text"]
+            for fraction in (0.25, 0.5, 0.75):
+                window = text[int(len(text) * fraction) : int(len(text) * fraction) + 4000].lower()
+                assert any(
+                    word in window for word in ("risk", "adverse", "could", "may", "harm")
+                ), f"{ticker} at {fraction:.0%} does not read like risk disclosure"
+
+
+class TestSectionExtractionRules:
+    def test_a_table_of_contents_entry_is_skipped_for_the_body(self):
+        text = (
+            "Item 1A. Risk Factors 9\n"
+            "Item 1B. Unresolved Staff Comments 12\n"
+            "Item 1A. Risk Factors\n"
+            + ("Our operations face substantial risk. " * 40)
+            + "\nItem 1B. Unresolved Staff Comments\nNone.\n"
+        )
+        body = extract_section(text, FilingSection.RISK_FACTORS)
+        assert "Our operations face substantial risk." in body
+        assert len(body) > 200
+
+    def test_a_mid_sentence_cross_reference_loses_to_a_real_heading(self):
+        text = (
+            "Item 1A. Risk Factors\n"
+            + ("The Company faces competition and regulatory exposure. " * 30)
+            + "\nItem 1B. Unresolved Staff Comments\nNone.\n"
+            "Item 2. Properties\nOffices.\n"
+            "Note 12. See Item 1A. Risk Factors for further discussion of these matters.\n"
+        )
+        body = extract_section(text, FilingSection.RISK_FACTORS)
+        assert body.startswith("Item 1A. Risk Factors")
+        assert "The Company faces competition" in body
+        assert "Note 12" not in body
+
+    def test_a_section_with_no_closing_boundary_still_returns_something(self):
+        text = "Item 1A. Risk Factors\n" + ("Risk disclosure text. " * 30)
+        assert len(extract_section(text, FilingSection.RISK_FACTORS)) > 200
+
+    def test_a_missing_section_is_empty(self):
+        assert extract_section("Item 7. MD&A\nNothing here.", FilingSection.RISK_FACTORS) == ""

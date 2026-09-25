@@ -86,31 +86,61 @@ def html_to_text(html: str) -> str:
     return parser.text()
 
 
+#: A section body has to be longer than this to be believable. Table-of-contents
+#: entries match the same heading pattern and yield about thirty characters.
+MIN_SECTION_CHARS = 200
+
+
 def extract_section(text: str, section: FilingSection) -> str:
     """Slice a filing's plain text down to one Item.
 
-    Filings repeat Item headings in the table of contents, so the *last* match
-    of the start pattern is used -- the ToC entry comes first, the real section
-    body comes later.
+    Three things make this harder than "find the heading".
+
+    **The table of contents repeats every heading.** Its entry matches the
+    start pattern and yields a couple of dozen characters before the next Item
+    heading, which is why a candidate has to clear `MIN_SECTION_CHARS`.
+
+    **Filings cross-reference their own Items in prose.** NVIDIA's 10-K says
+    "see Item 1A. Risk factors in this annual report" five separate times, mid
+    sentence. Taking the *last* match -- which this used to do -- landed on one
+    of those, found no closing boundary after it, and returned 123,000
+    characters of financial-statement notes labelled as risk factors. A heading
+    sits at the start of a line and a cross-reference does not, so line-start
+    matches are preferred when any exist.
+
+    **A candidate with no closing boundary is usually the wrong candidate.**
+    Real sections are followed by the next Item; a match that runs to the end
+    of the document has almost always landed somewhere it should not have.
     """
     start_pat, end_pat = SECTION_BOUNDS[section]
     starts = list(re.finditer(start_pat, text, re.IGNORECASE))
     if not starts:
         return ""
-    # The last occurrence is the section body; earlier ones are table-of-contents
-    # entries, which every filing repeats.
-    match = starts[-1]
-    tail = text[match.start() :]
 
-    # Search for the closing boundary *after* the start heading itself, so a
-    # pattern like "item 1a" cannot immediately re-match its own heading. Using
-    # the heading's own length rather than a fixed offset matters: a short
-    # section would otherwise run past its boundary into the next Item.
-    offset = match.end() - match.start()
-    end_match = re.search(end_pat, tail[offset:], re.IGNORECASE)
-    if end_match:
-        return tail[: offset + end_match.start()].strip()
-    return tail.strip()
+    headings = [m for m in starts if m.start() == 0 or text[m.start() - 1] == "\n"]
+    candidates = headings or starts
+
+    fallback: str | None = None
+    # Latest first: the body comes after the contents page.
+    for match in reversed(candidates):
+        tail = text[match.start() :]
+        # Search for the closing boundary *after* the start heading itself, so a
+        # pattern like "item 1a" cannot immediately re-match its own heading.
+        # Using the heading's own length rather than a fixed offset matters: a
+        # short section would otherwise run past its boundary into the next Item.
+        offset = match.end() - match.start()
+        end_match = re.search(end_pat, tail[offset:], re.IGNORECASE)
+        if end_match is None:
+            if fallback is None:
+                fallback = tail.strip()
+            continue
+        body = tail[: offset + end_match.start()].strip()
+        if len(body) >= MIN_SECTION_CHARS:
+            return body
+        if fallback is None:
+            fallback = body
+
+    return fallback or ""
 
 
 class _RateLimiter:

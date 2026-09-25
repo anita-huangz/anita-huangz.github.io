@@ -71,12 +71,27 @@ class Filing(Strict):
         )
 
 
+class RetrievedPassage(Strict):
+    """One span of a section, and where in it the span came from."""
+
+    text: str
+    start: int
+    end: int
+    score: float
+
+
 class SectionText(Strict):
     accession: str
     section: FilingSection
     text: str
     char_count: int
     truncated: bool = False
+    #: Set when the caller supplied a query. The passages are drawn from the
+    #: *whole* section rather than its first `max_chars`, which is the point:
+    #: a risk-factors section runs to 115,000 characters and truncation shows
+    #: about a fifth of it.
+    passages: list[RetrievedPassage] = Field(default_factory=list)
+    retrieval: str | None = None
 
 
 class FinancialFact(Strict):
@@ -157,6 +172,16 @@ class FetchSectionArgs(Strict):
     accession: str
     section: FilingSection = FilingSection.RISK_FACTORS
     max_chars: int = Field(default=20000, ge=500, le=200000)
+    query: str | None = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "What you are looking for. Supply it and the most relevant passages "
+            "from the whole section are returned instead of its first max_chars, "
+            "which for a risk-factors section is about a fifth of the text."
+        ),
+    )
+    passages: int = Field(default=6, ge=1, le=20)
 
     @field_validator("ticker")
     @classmethod

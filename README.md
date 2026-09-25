@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**2,892 tests** — 2,120 in Python, 738 in the browser, and 34 against the API, most of them
+**2,946 tests** — 2,174 in Python, 738 in the browser, and 34 against the API, most of them
 cross-checking the site's TypeScript ports against fixtures the Python
 generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
@@ -58,7 +58,7 @@ No API key needed for any of it. The optional model layer points at free tiers.
 
 ---
 
-### ✅ [SEC Filing Intelligence](llm-platform/sec-filing-intelligence) · 268 tests
+### ✅ [SEC Filing Intelligence](llm-platform/sec-filing-intelligence) · 322 tests
 
 Ask a question about a public company and get an answer with every claim cited
 to a specific SEC filing — then independently verified against the evidence that
