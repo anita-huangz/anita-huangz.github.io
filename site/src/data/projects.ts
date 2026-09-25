@@ -21,6 +21,9 @@ export const PROJECTS: Project[] = [
       "Claude",
       "AWS Bedrock",
       "Redis",
+      "job queues",
+      "retrieval",
+      "scikit-learn",
       "Docker",
       "React",
       "TypeScript"
@@ -33,7 +36,9 @@ export const PROJECTS: Project[] = [
       "Least-privilege capability grants plus a hard tool-call ceiling bound what the agent loop can reach and how long it runs",
       "Telemetry on every model and tool call: tokens, estimated USD, latency percentiles, failure kinds, sliced by model and tool",
       "An eval harness measuring accuracy, consistency, reliability, latency, and cost as separate numbers, because they fail independently",
-      "A React UI that streams the agent's run over server-sent events as it happens"
+      "A React UI that streams the agent's run over server-sent events as it happens",
+      "Retrieval over whole filing sections instead of their first 20,000 characters \u2014 which on three real 10-Ks was 17\u201329% of the text, chosen by position rather than relevance. Benchmarked at recall@5 of 0.0% for truncation, 66.7% for BM25 and 83.3% for latent semantic analysis",
+      "Long research runs submit as jobs and return in a millisecond instead of holding a connection for nine seconds, with leased claims so a dying worker loses nothing, retries classified against the error taxonomy, and an Idempotency-Key that 409s on a reused key with a changed body"
     ],
     "images": [
       {
@@ -44,7 +49,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A ticker and a plain-English question \u2014 e.g. AAPL, \"What supply chain risks does Apple disclose?\"",
       "output": "A cited answer plus structured findings, each with an accession number and filing date, a verified/unverified verdict, and the run's token, cost, and latency figures.",
-      "scale": "410 tests, all offline. Four tools, three model providers, one MCP server."
+      "scale": "410 tests, all offline. Four tools, three model providers, one MCP server, and a job queue that runs on Redis or in-process with identical semantics."
     },
     "sources": [
       {
